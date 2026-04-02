@@ -1,0 +1,43 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc && cp package.json dist/package.json",
+    "start": "node ./dist/core/index.js",
+    "start:dev": "ts-node-dev --files ./src/core/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.32.1",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "csrf": "^3.1.0",
+    "dotenv": "^17.4.0",
+    "express": "^5.2.1",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^8.3.2",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.3.3",
+    "resend": "^6.10.0",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "xss": "^1.0.15",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.5.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^6.0.2"
+  }
+}
