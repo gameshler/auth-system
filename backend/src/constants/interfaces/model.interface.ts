@@ -4,6 +4,7 @@ import verificationCodeType from "../enums/verificationCodeTypes";
 export interface sessionDocument extends mongoose.Document {
   userId: mongoose.Types.ObjectId;
   userAgent?: string;
+  refreshTokens: string;
   createdAt: Date;
   expiresAt: Date;
 }

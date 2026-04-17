@@ -21,7 +21,6 @@ import { hashValue } from "../../shared/utils/bcrypt";
 import {
   fifteenminutesFromNow,
   fiveMinutesAgo,
-  ONE_DAY_MS,
   sevenDaysFromNow,
   tenminutesFromNow,
 } from "../../shared/utils/date";
@@ -29,12 +28,14 @@ import {
   getPasswordResetTemplate,
   getVerifyEmailTemplate,
 } from "../../shared/utils/emailTemplates";
+import { hashToken } from "../../shared/utils/hash";
 import {
   refreshTokenSignOptions,
   signToken,
   verifyToken,
 } from "../../shared/utils/jwt";
 import { sendMail } from "../../shared/utils/sendMail";
+import { randomUUID as uuidv4 } from "crypto";
 
 export const createAccount = async (data: CreateAccountParams) => {
   const existingUser = await UserModel.exists({ email: data.email });
@@ -69,6 +70,7 @@ export const createAccount = async (data: CreateAccountParams) => {
   const session = await sessionModel.create({
     userId,
     userAgent: data.userAgent,
+    refreshTokens: uuidv4(),
   });
 
   const refreshToken = signToken(
@@ -77,6 +79,9 @@ export const createAccount = async (data: CreateAccountParams) => {
     },
     refreshTokenSignOptions,
   );
+
+  session.refreshTokens = hashToken(refreshToken);
+  await session.save();
 
   const accessToken = signToken({
     userId,
@@ -104,11 +109,14 @@ export const loginUser = async ({
   const session = await sessionModel.create({
     userId,
     userAgent,
+    refreshTokens: uuidv4(),
   });
   const sessionInfo: RefreshTokenPayload = {
     sessionId: session._id,
   };
   const refreshToken = signToken(sessionInfo, refreshTokenSignOptions);
+  session.refreshTokens = hashToken(refreshToken);
+  await session.save();
 
   const accessToken = signToken({
     ...sessionInfo,
@@ -133,21 +141,17 @@ export const refreshUserAccessToken = async (refreshToken: string) => {
     UNAUTHORIZED,
     "Session Expired",
   );
+  const valid = session.refreshTokens === hashToken(refreshToken);
+  appAssert(valid, UNAUTHORIZED, "Token reuse detected ");
 
-  const sessionNeedsRefresh = session.expiresAt.getTime() - now <= ONE_DAY_MS;
-  if (sessionNeedsRefresh) {
-    session.expiresAt = sevenDaysFromNow();
-    await session.save();
-  }
-
-  const newRefreshToken = sessionNeedsRefresh
-    ? signToken(
-        {
-          sessionId: session._id,
-        },
-        refreshTokenSignOptions,
-      )
-    : undefined;
+  const newRefreshToken = signToken(
+    {
+      sessionId: session._id,
+    },
+    refreshTokenSignOptions,
+  );
+  session.refreshTokens = hashToken(newRefreshToken);
+  session.expiresAt = sevenDaysFromNow();
 
   const accessToken = signToken({
     userId: session.userId,
