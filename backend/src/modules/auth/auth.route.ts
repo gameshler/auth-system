@@ -1,5 +1,12 @@
 import { Router } from "express";
-import limiter from "../../shared/middleware/rateLimiter";
+import {
+  deleteLimiter,
+  loginLimiter,
+  passwordResetLimiter,
+  refreshLimiter,
+  registerLimiter,
+  verifyCodeLimiter,
+} from "../../shared/middleware/rateLimiter";
 import {
   deleteAccountHandler,
   loginHandler,
@@ -14,17 +21,21 @@ import authenticate from "../../shared/middleware/authenticate";
 
 const authRoutes = Router();
 
-authRoutes.post("/register", limiter, registerHandler);
-authRoutes.post("/login", limiter, loginHandler);
-authRoutes.post("/refresh", refreshHandler);
+authRoutes.post("/register", registerLimiter, registerHandler);
+authRoutes.post("/login", loginLimiter, loginHandler);
+authRoutes.post("/refresh", refreshLimiter, refreshHandler);
 authRoutes.post("/logout", authenticate, logoutHandler);
-authRoutes.get("/email/verify/:code", verifyEmailHandler);
-authRoutes.post("/password/forgot", limiter, sendPasswordResetHandler);
-authRoutes.post("/password/reset", limiter, resetPasswordHandler);
+authRoutes.get("/email/verify/:code", verifyCodeLimiter, verifyEmailHandler);
+authRoutes.post(
+  "/password/forgot",
+  passwordResetLimiter,
+  sendPasswordResetHandler,
+);
+authRoutes.post("/password/reset", passwordResetLimiter, resetPasswordHandler);
 authRoutes.delete(
   "/delete-account",
-  limiter,
   authenticate,
+  deleteLimiter,
   deleteAccountHandler,
 );
 export default authRoutes;
