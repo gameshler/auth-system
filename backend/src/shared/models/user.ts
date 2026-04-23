@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { compareValue, hashValue } from "../utils/bcrypt";
+import { compareValue, hashValue } from "../utils/hash";
 import { UserDocument } from "../../constants/interfaces/model.interface";
 
 const userSchema = new mongoose.Schema<UserDocument>(

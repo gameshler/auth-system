@@ -1,27 +1,29 @@
 import { z } from "zod";
 
-export const emailSchema = z
+const emailSchema = z
   .string()
   .trim()
-  .min(1, { error: "Email is required" })
+  .min(6, { error: "Email is required" })
   .max(254, { error: "Email is too long" })
   .pipe(z.email("Invalid email address"))
   .transform((val) => val.toLowerCase());
 const passwordSchema = z
   .string()
   .min(12, { error: "Password must be at least 12 characters long" })
-  .max(255, { error: "Password too long" })
+  .max(25, { error: "Password too long" })
   .regex(/[A-Z]/, { error: "Must include an uppercase letter" })
   .regex(/[a-z]/, { error: "Must include a lowercase letter" })
   .regex(/[0-9]/, { error: "Must include a number" })
   .regex(/[^A-Za-z0-9]/, { error: "Must include a special character" });
 const userAgentSchema = z.string().optional();
+const ipSchema = z.string().optional();
 
 export const loginSchema = z
   .object({
     email: emailSchema,
     password: z.string().min(1, { error: "Password is required" }),
     userAgent: userAgentSchema,
+    ip: ipSchema,
   })
   .strict();
 
@@ -36,6 +38,7 @@ export const registerSchema = z
     password: passwordSchema,
     confirmPassword: z.string(),
     userAgent: userAgentSchema,
+    ip: ipSchema,
   })
   .strict()
   .superRefine(({ password, confirmPassword }, ctx) => {
@@ -51,13 +54,21 @@ export const registerSchema = z
 export const verificationCodeSchema = z
   .string()
   .trim()
-  .min(24, { error: "Invalid verification code" })
-  .max(24, { error: "Invalid verification code" })
+  .min(36, { error: "Invalid verification code" })
+  .max(36, { error: "Invalid verification code" })
   .regex(/^[A-Za-z0-9-_]+$/, { error: "Invalid verification code " });
+
+export const forgotPasswordSchema = z.object({
+  email: emailSchema,
+  userAgent: userAgentSchema,
+  ip: ipSchema,
+});
 
 export const resetPasswordSchema = z
   .object({
     password: passwordSchema,
     verificationCode: verificationCodeSchema,
+    userAgent: userAgentSchema,
+    ip: ipSchema,
   })
   .strict();

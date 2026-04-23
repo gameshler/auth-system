@@ -10,7 +10,7 @@ export const getSessionHandler = catchErrors(async (req, res) => {
       userId: req.userId,
       expiresAt: { $gt: new Date() },
     },
-    { _id: 1, userAgent: 1, createdAt: 1 },
+    { _id: 1, userAgent: 1, ip: 1, createdAt: 1 },
     {
       sort: { createdAt: -1 },
     },

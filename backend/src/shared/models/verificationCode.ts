@@ -12,6 +12,7 @@ const verificationCodeSchema = new mongoose.Schema<verificationCodeDocument>({
     type: String,
     required: true,
   },
+  code: { type: String, required: true },
   createdAt: {
     type: Date,
     required: true,
@@ -26,6 +27,6 @@ const verificationCodeSchema = new mongoose.Schema<verificationCodeDocument>({
 const verificationCodeModel = mongoose.model<verificationCodeDocument>(
   "VerificationCode",
   verificationCodeSchema,
-  "verification_codes"
+  "verification_codes",
 );
 export default verificationCodeModel;

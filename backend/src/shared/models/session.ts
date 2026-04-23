@@ -9,7 +9,8 @@ const sessionSchema = new mongoose.Schema<sessionDocument>({
     index: true,
   },
   userAgent: { type: String },
-  refreshTokens: { type: String, required: true },
+  ip: { type: String },
+  refreshToken: { type: String, required: true },
   createdAt: { type: Date, required: true, default: Date.now },
   expiresAt: { type: Date, required: true, default: sevenDaysFromNow },
 });

@@ -15,7 +15,7 @@ import {
 } from "../../shared/utils/cookies";
 import { verifyToken } from "../../shared/utils/jwt";
 import {
-  emailSchema,
+  forgotPasswordSchema,
   loginSchema,
   registerSchema,
   resetPasswordSchema,
@@ -35,6 +35,7 @@ export const registerHandler = catchErrors(async (req, res) => {
   const request = registerSchema.parse({
     ...req.body,
     userAgent: req.headers["user-agent"],
+    ip: req.ip,
   });
 
   const { user, accessToken, refreshToken } = await createAccount(request);
@@ -48,6 +49,7 @@ export const loginHandler = catchErrors(async (req, res) => {
   const request = loginSchema.parse({
     ...req.body,
     userAgent: req.headers["user-agent"],
+    ip: req.ip,
   });
   const { accessToken, refreshToken } = await loginUser(request);
 
@@ -93,13 +95,21 @@ export const verifyEmailHandler = catchErrors(async (req, res) => {
 });
 
 export const sendPasswordResetHandler = catchErrors(async (req, res) => {
-  const email = emailSchema.parse(req.body.email);
-  await sendPasswordResetEmail(email);
+  const request = forgotPasswordSchema.parse({
+    ...req.body,
+    userAgent: req.headers["user-agent"],
+    ip: req.ip,
+  });
+  await sendPasswordResetEmail(request);
   return res.status(OK).json({ message: "Password reset email sent" });
 });
 
 export const resetPasswordHandler = catchErrors(async (req, res) => {
-  const request = resetPasswordSchema.parse(req.body);
+  const request = resetPasswordSchema.parse({
+    ...req.body,
+    userAgent: req.headers["user-agent"],
+    ip: req.ip,
+  });
   await resetPassword(request);
   return clearAuthCookies(res)
     .status(OK)
