@@ -18,6 +18,8 @@ import {
   verifyEmailHandler,
 } from "./auth.controller";
 import authenticate from "../../shared/middleware/authenticate";
+import authorize from "../../shared/middleware/authorize";
+import Permission from "../../constants/enums/permissions";
 
 const authRoutes = Router();
 
@@ -35,6 +37,7 @@ authRoutes.post("/password/reset", passwordResetLimiter, resetPasswordHandler);
 authRoutes.delete(
   "/delete-account",
   authenticate,
+  authorize(Permission.ACCOUNT_DELETE_SELF),
   deleteLimiter,
   deleteAccountHandler,
 );

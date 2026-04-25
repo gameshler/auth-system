@@ -8,13 +8,13 @@ export type AppAssert = (
   condition: any,
   HttpStatusCode: HttpStatusCode,
   message: string,
-  appErrorCode?: AppErrorCode
+  appErrorCode?: AppErrorCode,
 ) => asserts condition;
 
 export type AsyncController = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => Promise<any>;
 
 export type Params = {
@@ -30,6 +30,8 @@ export type RefreshTokenPayload = {
 export type AccessTokenPayload = {
   userId: UserDocument["_id"];
   sessionId: sessionDocument["_id"];
+  role: UserDocument["role"];
+  verified: UserDocument["verified"];
 };
 
 export type SignOptionsAndSecret = SignOptions & {

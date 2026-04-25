@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { compareValue, hashValue } from "../utils/hash";
 import { UserDocument } from "../../constants/interfaces/model.interface";
+import Role from "../../constants/enums/roles";
 
 const userSchema = new mongoose.Schema<UserDocument>(
   {
@@ -8,7 +9,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     verified: { type: Boolean, required: true, default: false },
-    role: { type: String, enum: ["user", "admin"], default: "user" },
+    role: { type: String, enum: Object.values(Role), default: Role.USER },
   },
   {
     timestamps: true,

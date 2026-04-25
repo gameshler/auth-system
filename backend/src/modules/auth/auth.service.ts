@@ -89,6 +89,8 @@ export const createAccount = async (params: CreateAccountParams) => {
   const accessToken = signToken({
     userId,
     sessionId: session._id,
+    role: user.role,
+    verified: user.verified,
   });
 
   return {
@@ -122,6 +124,8 @@ export const loginUser = async (params: LoginParams) => {
   const accessToken = signToken({
     ...sessionInfo,
     userId,
+    role: user.role,
+    verified: user.verified,
   });
   await sendMail({
     to: user.email,
@@ -168,9 +172,14 @@ export const refreshUserAccessToken = async (refreshToken: string) => {
   session.refreshToken = hashToken(newRefreshToken);
   session.expiresAt = sevenDaysFromNow();
 
+  const user = await UserModel.findById(session.userId);
+  appAssert(user, UNAUTHORIZED, "User not found");
+
   const accessToken = signToken({
-    userId: session.userId,
+    userId: user._id,
     sessionId: session._id,
+    role: user.role,
+    verified: user.verified,
   });
 
   return {

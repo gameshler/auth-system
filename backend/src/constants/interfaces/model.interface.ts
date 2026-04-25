@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import verificationCodeType from "../enums/verificationCodeTypes";
+import Role from "../enums/roles";
 
 export interface sessionDocument extends mongoose.Document {
   userId: mongoose.Types.ObjectId;
@@ -16,7 +17,7 @@ export interface UserDocument extends mongoose.Document {
   password: string;
   verified: boolean;
 
-  role: "user" | "admin";
+  role: Role;
 
   createdAt: Date;
   updatedAt: Date;
