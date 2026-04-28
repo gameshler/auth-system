@@ -3,6 +3,8 @@ import catchErrors from "../../../shared/utils/catchErrors";
 import sessionModel from "../../../shared/models/session";
 import { NOT_FOUND, OK } from "../../../constants/http";
 import appAssert from "../../../shared/utils/appAssert";
+import { ErrorMessages } from "../../../shared/utils/errorMessages";
+import AppErrorCode from "../../../constants/enums/AppErrorCode";
 
 export const getSessionHandler = catchErrors(async (req, res) => {
   const sessions = await sessionModel.find(
@@ -31,6 +33,6 @@ export const deleteSessionHandler = catchErrors(async (req, res) => {
     _id: sessionId,
     userId: req.userId,
   });
-  appAssert(deleted, NOT_FOUND, "Session not found");
+  appAssert(deleted, NOT_FOUND, ErrorMessages.NotFound, AppErrorCode.NotFound);
   return res.status(OK).json({ message: "Session removed" });
 });

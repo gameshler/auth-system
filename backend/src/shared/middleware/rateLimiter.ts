@@ -4,36 +4,33 @@ import rateLimit, {
 } from "express-rate-limit";
 import appAssert from "../utils/appAssert";
 import { TOO_MANY_REQUESTS } from "../../constants/http";
+import { ErrorMessages } from "../utils/errorMessages";
+import AppErrorCode from "../../constants/enums/AppErrorCode";
+import { Request, Response } from "express";
 
 const baseConfig = {
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    appAssert(
+      false,
+      TOO_MANY_REQUESTS,
+      ErrorMessages.TooManyRequests,
+      AppErrorCode.TooManyRequests,
+    );
+  },
 };
 
 export const limiter: RateLimitRequestHandler = rateLimit({
-  ...baseConfig,
   windowMs: 15 * 60 * 1000, // 15 min
   limit: 30,
-  handler: (req, res) => {
-    appAssert(
-      false,
-      TOO_MANY_REQUESTS,
-      "Too many attempts,please try again later",
-    );
-  },
+  ...baseConfig,
 });
 
 export const loginLimiter: RateLimitRequestHandler = rateLimit({
-  ...baseConfig,
   windowMs: 15 * 60 * 1000, // 15 min
   limit: 5,
-  handler: (req, res) => {
-    appAssert(
-      false,
-      TOO_MANY_REQUESTS,
-      "Too many login attempts, please try again later",
-    );
-  },
+  ...baseConfig,
   keyGenerator: (req) => {
     const email = req.body.email || "unknown";
     const ip = ipKeyGenerator(req.ip || "unknown");
@@ -42,79 +39,37 @@ export const loginLimiter: RateLimitRequestHandler = rateLimit({
 });
 
 export const registerLimiter: RateLimitRequestHandler = rateLimit({
-  ...baseConfig,
   windowMs: 60 * 60 * 1000, // 1 hour
   limit: 3,
-  handler: (req, res) => {
-    appAssert(
-      false,
-      TOO_MANY_REQUESTS,
-      "Too many registration attempts, please try again later",
-    );
-  },
+  ...baseConfig,
 });
 
 export const passwordResetLimiter: RateLimitRequestHandler = rateLimit({
-  ...baseConfig,
   windowMs: 30 * 60 * 1000, // 30 min
-  limit: 3,
-  handler: (req, res) => {
-    appAssert(
-      false,
-      TOO_MANY_REQUESTS,
-      "Too many password reset requests, please try again later",
-    );
-  },
+  limit: 1,
+  ...baseConfig,
 });
 
 export const refreshLimiter: RateLimitRequestHandler = rateLimit({
-  ...baseConfig,
   windowMs: 15 * 60 * 1000, // 15 min
   limit: 3,
-  handler: (req, res) => {
-    appAssert(
-      false,
-      TOO_MANY_REQUESTS,
-      "Too many refresh requests, please try again later",
-    );
-  },
+  ...baseConfig,
 });
 
 export const verifyCodeLimiter: RateLimitRequestHandler = rateLimit({
-  ...baseConfig,
   windowMs: 15 * 60 * 1000, // 15 min
   limit: 3,
-  handler: (req, res) => {
-    appAssert(
-      false,
-      TOO_MANY_REQUESTS,
-      "Too many email verification code requests, please try again later",
-    );
-  },
+  ...baseConfig,
 });
 
 export const deleteLimiter: RateLimitRequestHandler = rateLimit({
-  ...baseConfig,
   windowMs: 60 * 60 * 1000, // 60 min
   limit: 2,
-  handler: (req, res) => {
-    appAssert(
-      false,
-      TOO_MANY_REQUESTS,
-      "Too many delete requests, please try again later",
-    );
-  },
+  ...baseConfig,
 });
 
 export const deleteSessionLimiter: RateLimitRequestHandler = rateLimit({
-  ...baseConfig,
   windowMs: 60 * 60 * 1000, // 60 min
   limit: 8,
-  handler: (req, res) => {
-    appAssert(
-      false,
-      TOO_MANY_REQUESTS,
-      "Too many delete requests, please try again later",
-    );
-  },
+  ...baseConfig,
 });

@@ -1,3 +1,6 @@
+import mongoose from "mongoose";
+import Role from "../enums/roles";
+
 export type CreateAccountParams = {
   fullName: string;
   email: string;
@@ -22,6 +25,14 @@ export type ResetPasswordParams = {
 
 export type ForgotPasswordParams = {
   email: string;
+  userAgent?: string;
+  ip?: string;
+};
+
+export type CreateAuthenticatedSessionParams = {
+  userId: mongoose.Types.ObjectId;
+  role: Role;
+  verified: boolean;
   userAgent?: string;
   ip?: string;
 };

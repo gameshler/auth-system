@@ -3,8 +3,8 @@ import { z } from "zod";
 const emailSchema = z
   .string()
   .trim()
-  .min(6, { error: "Email is required" })
-  .max(254, { error: "Email is too long" })
+  .min(10, { error: "Email is required" })
+  .max(120, { error: "Email is too long" })
   .pipe(z.email("Invalid email address"))
   .transform((val) => val.toLowerCase());
 const passwordSchema = z
@@ -33,7 +33,7 @@ export const registerSchema = z
     fullName: z
       .string()
       .trim()
-      .min(1, { error: "Full name is required" })
+      .min(3, { error: "Full name is required" })
       .max(50, { error: "Full name is too long" }),
     password: passwordSchema,
     confirmPassword: z.string(),
@@ -54,8 +54,8 @@ export const registerSchema = z
 export const verificationCodeSchema = z
   .string()
   .trim()
-  .min(36, { error: "Invalid verification code" })
-  .max(36, { error: "Invalid verification code" })
+  .min(24, { error: "Invalid verification code" })
+  .max(24, { error: "Invalid verification code" })
   .regex(/^[A-Za-z0-9-_]+$/, { error: "Invalid verification code " });
 
 export const forgotPasswordSchema = z.object({

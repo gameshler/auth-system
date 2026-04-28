@@ -3,21 +3,43 @@ import Permission from "../../constants/enums/permissions";
 import { rolePermissions } from "../../constants/rolePermissions";
 import { FORBIDDEN, UNAUTHORIZED } from "../../constants/http";
 import appAssert from "../utils/appAssert";
+import { ErrorMessages } from "../utils/errorMessages";
+import AppErrorCode from "../../constants/enums/AppErrorCode";
 
 const authorize =
   (...requiredPermissions: Permission[]) =>
   (req: Request, res: Response, next: NextFunction) => {
-    appAssert(req.userId, UNAUTHORIZED, "Unauthorized");
-    appAssert(req.role, UNAUTHORIZED, "Unauthorized");
+    appAssert(
+      req.userId,
+      UNAUTHORIZED,
+      ErrorMessages.Unauthorized,
+      AppErrorCode.Unauthorized,
+    );
+    appAssert(
+      req.role,
+      UNAUTHORIZED,
+      ErrorMessages.Unauthorized,
+      AppErrorCode.Unauthorized,
+    );
 
     const userPermissions = rolePermissions[req.role] || [];
-    appAssert(userPermissions, FORBIDDEN, "Unauthorized");
+    appAssert(
+      userPermissions,
+      FORBIDDEN,
+      ErrorMessages.Forbidden,
+      AppErrorCode.Forbidden,
+    );
 
     const allowed = requiredPermissions.every((permission) =>
       userPermissions.includes(permission),
     );
 
-    appAssert(allowed, FORBIDDEN, "Forbidden");
+    appAssert(
+      allowed,
+      FORBIDDEN,
+      ErrorMessages.Forbidden,
+      AppErrorCode.Forbidden,
+    );
 
     next();
   };

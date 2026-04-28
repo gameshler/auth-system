@@ -1,3 +1,4 @@
+import AppErrorCode from "../../constants/enums/AppErrorCode";
 import {
   CREATED,
   INTERNAL_SERVER_ERROR,
@@ -13,6 +14,7 @@ import {
   getRefreshTokenCookieOptions,
   setAuthCookies,
 } from "../../shared/utils/cookies";
+import { ErrorMessages } from "../../shared/utils/errorMessages";
 import { verifyToken } from "../../shared/utils/jwt";
 import {
   forgotPasswordSchema,
@@ -72,7 +74,12 @@ export const logoutHandler = catchErrors(async (req, res) => {
 export const refreshHandler = catchErrors(async (req, res) => {
   const refreshToken = req.cookies.refreshToken;
 
-  appAssert(refreshToken, UNAUTHORIZED, "Missing refresh token");
+  appAssert(
+    refreshToken,
+    UNAUTHORIZED,
+    ErrorMessages.InvalidSession,
+    AppErrorCode.InvalidSession,
+  );
   const { accessToken, newRefreshToken } =
     await refreshUserAccessToken(refreshToken);
   if (newRefreshToken) {
@@ -120,7 +127,13 @@ export const deleteAccountHandler = catchErrors(async (req, res) => {
   const userId = String(req.userId);
 
   const deletedUser = await deleteUserAccount(userId);
-  appAssert(deletedUser, INTERNAL_SERVER_ERROR, "Failed to delete user");
+  appAssert(
+    deletedUser,
+    INTERNAL_SERVER_ERROR,
+    ErrorMessages.ServerError,
+    AppErrorCode.ServerError,
+  );
+
   return clearAuthCookies(res).status(OK).json({
     message: "Account deleted successfully",
     user: deletedUser,

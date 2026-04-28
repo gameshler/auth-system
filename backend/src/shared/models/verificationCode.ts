@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { verificationCodeDocument } from "../../constants/interfaces/model.interface";
+import { generateUniqueCode } from "../utils/uuid";
 
 const verificationCodeSchema = new mongoose.Schema<verificationCodeDocument>({
   userId: {
@@ -12,7 +13,12 @@ const verificationCodeSchema = new mongoose.Schema<verificationCodeDocument>({
     type: String,
     required: true,
   },
-  code: { type: String, required: true },
+  code: {
+    type: String,
+    unique: true,
+    required: true,
+    default: generateUniqueCode,
+  },
   createdAt: {
     type: Date,
     required: true,

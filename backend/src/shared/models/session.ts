@@ -7,6 +7,7 @@ const sessionSchema = new mongoose.Schema<sessionDocument>({
     ref: "User",
     type: mongoose.Schema.Types.ObjectId,
     index: true,
+    required: true,
   },
   userAgent: { type: String },
   ip: { type: String },
