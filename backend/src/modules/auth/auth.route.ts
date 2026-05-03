@@ -20,6 +20,8 @@ import {
 import authenticate from "../../shared/middleware/authenticate";
 import authorize from "../../shared/middleware/authorize";
 import Permission from "../../constants/enums/permissions";
+import mfaRoutes from "./mfa/mfa.route";
+import sessionRoutes from "./session/session.route";
 
 const authRoutes = Router();
 
@@ -41,4 +43,8 @@ authRoutes.delete(
   deleteLimiter,
   deleteAccountHandler,
 );
+
+authRoutes.use("/2fa", mfaRoutes);
+authRoutes.use("/sessions", authenticate, sessionRoutes);
+
 export default authRoutes;

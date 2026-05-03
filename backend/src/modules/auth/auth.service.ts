@@ -13,8 +13,12 @@ import {
   ForgotPasswordParams,
   LoginParams,
   ResetPasswordParams,
+  UserParams,
 } from "../../constants/types/params.types";
-import { RefreshTokenPayload } from "../../constants/types/utils.types";
+import {
+  LoginResult,
+  RefreshTokenPayload,
+} from "../../constants/types/utils.types";
 import sessionModel from "../../shared/models/session";
 import UserModel from "../../shared/models/user";
 import verificationCodeModel from "../../shared/models/verificationCode";
@@ -22,6 +26,7 @@ import appAssert from "../../shared/utils/appAssert";
 import {
   fifteenminutesFromNow,
   fiveMinutesAgo,
+  fiveminutesFromNow,
   sevenDaysFromNow,
   tenminutesFromNow,
 } from "../../shared/utils/date";
@@ -30,14 +35,13 @@ import {
   getVerifyEmailTemplate,
 } from "../../shared/utils/emailTemplates";
 import { ErrorMessages } from "../../shared/utils/errorMessages";
-import { hashToken } from "../../shared/utils/hash";
 import {
   refreshTokenSignOptions,
   signToken,
   verifyToken,
 } from "../../shared/utils/jwt";
 import { sendMail } from "../../shared/utils/sendMail";
-import { generateUniqueCode } from "../../shared/utils/uuid";
+import { generateUniqueCode, hashCode } from "../../shared/utils/crypto";
 import { createAuthenticatedSession } from "./auth.helpers";
 
 export const createAccount = async (params: CreateAccountParams) => {
@@ -61,7 +65,7 @@ export const createAccount = async (params: CreateAccountParams) => {
   const code = generateUniqueCode();
   await verificationCodeModel.create({
     userId,
-    code: hashToken(code),
+    code: hashCode(code),
     type: verificationCodeType.EmailVerification,
     expiresAt: fifteenminutesFromNow(),
   });
@@ -88,7 +92,7 @@ export const createAccount = async (params: CreateAccountParams) => {
   };
 };
 
-export const loginUser = async (params: LoginParams) => {
+export const loginUser = async (params: LoginParams): Promise<LoginResult> => {
   const { email, password, userAgent, ip } = params;
   const user = await UserModel.findOne({ email });
 
@@ -98,6 +102,20 @@ export const loginUser = async (params: LoginParams) => {
     ErrorMessages.InvalidCredentials,
     AppErrorCode.InvalidCredentials,
   );
+
+  if (user.mfa.enabled) {
+    const challenge = await verificationCodeModel.create({
+      userId: user._id,
+      type: verificationCodeType.Mfa_Auth,
+      expiresAt: fiveminutesFromNow(),
+    });
+
+    return {
+      mfaRequired: true,
+      challengeId: String(challenge._id),
+      message: "MFA required",
+    };
+  }
 
   const { accessToken, refreshToken } = await createAuthenticatedSession({
     userId: user._id,
@@ -120,6 +138,7 @@ export const loginUser = async (params: LoginParams) => {
   });
 
   return {
+    mfaRequired: false,
     user: user.omitPassword(),
     accessToken,
     refreshToken,
@@ -150,7 +169,7 @@ export const refreshUserAccessToken = async (refreshToken: string) => {
     ErrorMessages.SessionExpired,
     AppErrorCode.SessionExpired,
   );
-  const valid = session.refreshToken === hashToken(refreshToken);
+  const valid = session.refreshToken === hashCode(refreshToken);
   appAssert(
     valid,
     UNAUTHORIZED,
@@ -163,7 +182,7 @@ export const refreshUserAccessToken = async (refreshToken: string) => {
   };
 
   const newRefreshToken = signToken(sessionInfo, refreshTokenSignOptions);
-  session.refreshToken = hashToken(newRefreshToken);
+  session.refreshToken = hashCode(newRefreshToken);
   session.expiresAt = sevenDaysFromNow();
 
   const user = await UserModel.findById(session.userId);
@@ -189,7 +208,7 @@ export const refreshUserAccessToken = async (refreshToken: string) => {
 
 export const verifyEmail = async (code: string) => {
   const validCode = await verificationCodeModel.findOne({
-    code: hashToken(code),
+    code: hashCode(code),
     type: verificationCodeType.EmailVerification,
     expiresAt: { $gt: new Date() },
   });
@@ -244,7 +263,7 @@ export const sendPasswordResetEmail = async (params: ForgotPasswordParams) => {
   await verificationCodeModel.create({
     userId: user._id,
     type: verificationCodeType.PasswordReset,
-    code: hashToken(code),
+    code: hashCode(code),
     expiresAt,
   });
   const url = `${CLIENT_URL}/password/reset?code=${
@@ -278,7 +297,7 @@ export const sendPasswordResetEmail = async (params: ForgotPasswordParams) => {
 export const resetPassword = async (params: ResetPasswordParams) => {
   const { password, verificationCode, userAgent, ip } = params;
   const validCode = await verificationCodeModel.findOne({
-    code: hashToken(verificationCode),
+    code: hashCode(verificationCode),
     type: verificationCodeType.PasswordReset,
     expiresAt: { $gt: new Date() },
   });
@@ -318,7 +337,8 @@ export const resetPassword = async (params: ResetPasswordParams) => {
   };
 };
 
-export const deleteUserAccount = async (userId: string) => {
+export const deleteUserAccount = async (params: UserParams) => {
+  const { userId } = params;
   const deletedUser = await UserModel.findByIdAndDelete(userId);
   appAssert(
     deletedUser,

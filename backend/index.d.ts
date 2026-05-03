@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import Role from "./src/constants/enums/roles";
+import Role from "./src/constants/enums/roles.ts";
 
 declare global {
   namespace Express {
@@ -7,7 +7,7 @@ declare global {
       userId: mongoose.Types.ObjectId;
       sessionId: mongoose.Types.ObjectId;
       role: Role;
-      verified: Boolean;
+      verified: boolean;
     }
   }
 }

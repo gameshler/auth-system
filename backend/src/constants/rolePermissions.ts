@@ -9,6 +9,10 @@ export const rolePermissions: Record<Role, Permission[]> = {
     Permission.SESSION_DELETE_SELF,
 
     Permission.ACCOUNT_DELETE_SELF,
+
+    Permission.MFA_SETUP_SELF,
+    Permission.MFA_DISABLE_SELF,
+    Permission.MFA_MANAGE_BACKUP_CODES_SELF,
   ],
 
   [Role.ADMIN]: [
@@ -25,6 +29,10 @@ export const rolePermissions: Record<Role, Permission[]> = {
     Permission.USER_DELETE_ANY,
 
     Permission.USER_ROLE_UPDATE,
+
+    Permission.MFA_SETUP_SELF,
+    Permission.MFA_DISABLE_SELF,
+    Permission.MFA_MANAGE_BACKUP_CODES_SELF,
 
     Permission.ADMIN_ACCESS,
   ],

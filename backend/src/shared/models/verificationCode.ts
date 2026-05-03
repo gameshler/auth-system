@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { verificationCodeDocument } from "../../constants/interfaces/model.interface";
-import { generateUniqueCode } from "../utils/uuid";
+import { generateUniqueCode } from "../utils/crypto";
 
 const verificationCodeSchema = new mongoose.Schema<verificationCodeDocument>({
   userId: {

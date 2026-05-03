@@ -29,6 +29,32 @@ export type ForgotPasswordParams = {
   ip?: string;
 };
 
+export type UserParams = {
+  userId: mongoose.Types.ObjectId;
+};
+
+export type MfaSetupParams = {
+  userId: mongoose.Types.ObjectId;
+  code: string;
+};
+
+export type MfaLoginParams = {
+  challengeId: string;
+  code: string;
+  userAgent?: string;
+  ip?: string;
+};
+
+export type DisableMfaParams = {
+  userId: mongoose.Types.ObjectId;
+  password: string;
+};
+
+export type RegenBackupCodesParams = {
+  userId: mongoose.Types.ObjectId;
+  password: string;
+};
+
 export type CreateAuthenticatedSessionParams = {
   userId: mongoose.Types.ObjectId;
   role: Role;

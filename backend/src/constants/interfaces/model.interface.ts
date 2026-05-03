@@ -16,7 +16,15 @@ export interface UserDocument extends mongoose.Document {
   email: string;
   password: string;
   verified: boolean;
-
+  mfa: {
+    enabled: boolean;
+    secret?: string;
+    tempSecret?: string;
+    backupCodes: string[];
+    lastUsedStep?: number;
+    failedAttempts: number;
+    lockoutUntil?: Date;
+  };
   role: Role;
 
   createdAt: Date;

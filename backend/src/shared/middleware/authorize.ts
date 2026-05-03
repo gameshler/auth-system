@@ -22,7 +22,7 @@ const authorize =
       AppErrorCode.Unauthorized,
     );
 
-    const userPermissions = rolePermissions[req.role] || [];
+    const userPermissions = rolePermissions[req.role];
     appAssert(
       userPermissions,
       FORBIDDEN,

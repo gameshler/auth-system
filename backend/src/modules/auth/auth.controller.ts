@@ -53,9 +53,20 @@ export const loginHandler = catchErrors(async (req, res) => {
     userAgent: req.headers["user-agent"],
     ip: req.ip,
   });
-  const { accessToken, refreshToken } = await loginUser(request);
+  const result = await loginUser(request);
+  if (result.mfaRequired) {
+    return res.status(OK).json({
+      message: result.message,
+      mfaRequired: true,
+      challengeId: result.challengeId,
+    });
+  }
 
-  return setAuthCookies({ res, accessToken, refreshToken })
+  return setAuthCookies({
+    res,
+    accessToken: result.accessToken,
+    refreshToken: result.refreshToken,
+  })
     .status(OK)
     .json({ message: "Login successful" });
 });
@@ -124,9 +135,9 @@ export const resetPasswordHandler = catchErrors(async (req, res) => {
 });
 
 export const deleteAccountHandler = catchErrors(async (req, res) => {
-  const userId = String(req.userId);
+  const userId = req.userId;
 
-  const deletedUser = await deleteUserAccount(userId);
+  const deletedUser = await deleteUserAccount({ userId });
   appAssert(
     deletedUser,
     INTERNAL_SERVER_ERROR,

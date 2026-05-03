@@ -13,6 +13,10 @@ const enum Permission {
 
   USER_ROLE_UPDATE = "user.role.update",
 
+  MFA_SETUP_SELF = "mfa_setup_self",
+  MFA_DISABLE_SELF = "mfa_disable_self",
+  MFA_MANAGE_BACKUP_CODES_SELF = "mfa_manage_backup_codes_self",
+
   ADMIN_ACCESS = "admin.access",
 }
 

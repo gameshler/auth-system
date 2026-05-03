@@ -32,7 +32,7 @@ export const loginLimiter: RateLimitRequestHandler = rateLimit({
   limit: 5,
   ...baseConfig,
   keyGenerator: (req) => {
-    const email = req.body.email || "unknown";
+    const email = req.body.email;
     const ip = ipKeyGenerator(req.ip || "unknown");
     return `${ip}-${email}`;
   },
@@ -60,6 +60,17 @@ export const verifyCodeLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   limit: 3,
   ...baseConfig,
+});
+
+export const mfaLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 3,
+  ...baseConfig,
+  keyGenerator: (req) => {
+    const challengeId = req.body.challengeId;
+    const ip = ipKeyGenerator(req.ip || "");
+    return `${ip}-${challengeId}`;
+  },
 });
 
 export const deleteLimiter: RateLimitRequestHandler = rateLimit({

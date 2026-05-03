@@ -1,9 +1,8 @@
 import { CreateAuthenticatedSessionParams } from "../../constants/types/params.types";
 import { RefreshTokenPayload } from "../../constants/types/utils.types";
 import sessionModel from "../../shared/models/session";
-import { hashToken } from "../../shared/utils/hash";
+import { generateUniqueCode, hashCode } from "../../shared/utils/crypto";
 import { refreshTokenSignOptions, signToken } from "../../shared/utils/jwt";
-import { generateUniqueCode } from "../../shared/utils/uuid";
 
 export const createAuthenticatedSession = async ({
   userId,
@@ -25,7 +24,7 @@ export const createAuthenticatedSession = async ({
 
   const refreshToken = signToken(sessionInfo, refreshTokenSignOptions);
 
-  session.refreshToken = hashToken(refreshToken);
+  session.refreshToken = hashCode(refreshToken);
   await session.save();
 
   const accessToken = signToken({

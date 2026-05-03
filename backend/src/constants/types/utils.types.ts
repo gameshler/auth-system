@@ -44,3 +44,18 @@ export type MailParams = {
   text: string;
   html: string;
 };
+
+type LoginSuccess = {
+  mfaRequired?: false;
+  user: any;
+  accessToken: string;
+  refreshToken: string;
+};
+
+type LoginMfaRequired = {
+  mfaRequired: true;
+  challengeId?: string;
+  message: string;
+};
+
+export type LoginResult = LoginSuccess | LoginMfaRequired;
