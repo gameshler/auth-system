@@ -7,29 +7,81 @@ import {
   UNAUTHORIZED,
 } from "../../../constants/http";
 import { hashSecret } from "../../../shared/utils/crypto";
+import { ErrorMessages } from "../../../shared/utils/errorMessages";
+import AppErrorCode from "../../../constants/enums/AppErrorCode";
 
-const safeEqual = (a: string, b: string): boolean => {
-  const bufA = Buffer.from(a, "hex");
-  const bufB = Buffer.from(b, "hex");
-  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+export const safeEqual = (a: string, b: string): boolean => {
+  try {
+    const bufA = Buffer.from(a, "hex");
+    const bufB = Buffer.from(b, "hex");
+
+    if (bufA.length !== bufB.length) return false;
+
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
 };
 
 export const assertMfaNotEnabled = (user: any) => {
-  appAssert(!user.mfa.enabled, BAD_REQUEST, "MFA already enabled");
+  appAssert(
+    !user.mfa.enabled,
+    BAD_REQUEST,
+    ErrorMessages.AccountOperationFailed,
+    AppErrorCode.MfaAlreadyEnabled,
+  );
 };
 
 export const assertTempSecretExists = (user: any) => {
-  appAssert(user.mfa.tempSecret, BAD_REQUEST, "Setup session expired");
+  appAssert(
+    user.mfa.tempSecret,
+    BAD_REQUEST,
+    ErrorMessages.InvalidSession,
+    AppErrorCode.SessionExpired,
+  );
+
+  const TEN_MINUTES = 10 * 60 * 1000;
+
+  appAssert(
+    user.mfa.tempSecretCreatedAt &&
+      Date.now() - user.mfa.tempSecretCreatedAt.getTime() < TEN_MINUTES,
+    BAD_REQUEST,
+    ErrorMessages.InvalidOrExpiredToken,
+    AppErrorCode.SessionExpired,
+  );
 };
 
-export const assertValidTotp = (secret: string, code: string) => {
-  const isValid = speakeasy.totp.verify({
+export const verifyTotpOrThrow = (
+  secret: string,
+  code: string,
+  lastUsedStep: number,
+) => {
+  const currentStep = Math.floor(Date.now() / 30000);
+
+  const result = speakeasy.totp.verifyDelta({
     secret,
     encoding: "base32",
     token: code,
     window: 1,
   });
-  appAssert(isValid, BAD_REQUEST, "Invalid verification code");
+
+  appAssert(
+    result,
+    BAD_REQUEST,
+    ErrorMessages.InvalidOrExpiredToken,
+    AppErrorCode.InvalidMfaCode,
+  );
+
+  const verifiedStep = currentStep + result.delta;
+
+  appAssert(
+    verifiedStep > lastUsedStep,
+    UNAUTHORIZED,
+    ErrorMessages.InvalidOrExpiredToken,
+    AppErrorCode.InvalidMfaCode,
+  );
+
+  return verifiedStep;
 };
 
 export const assertNotLocked = (user: any) => {
@@ -37,54 +89,38 @@ export const assertNotLocked = (user: any) => {
     const minutesLeft = Math.ceil(
       (user.mfa.lockoutUntil.getTime() - Date.now()) / 60000,
     );
+
     appAssert(
       false,
       TOO_MANY_REQUESTS,
-      `Account locked. Try again in ${minutesLeft}m.`,
+      `Too many attempts. Try again in ${minutesLeft}m.`,
+      AppErrorCode.TooManyRequests,
     );
-  }
-};
-
-export const assertValidCode = (
-  code: string,
-  secret: string,
-  backupCodes: string[],
-  lastUsedStep: number,
-  currentStep: number,
-) => {
-  const isValidTotp = speakeasy.totp.verify({
-    secret,
-    encoding: "base32",
-    token: code,
-    window: 1,
-  });
-
-  if (isValidTotp && lastUsedStep === currentStep) {
-    appAssert(false, UNAUTHORIZED, "Code already used.");
-  }
-
-  let backupCodeIndex = -1;
-  if (!isValidTotp) {
-    const inputHash = hashSecret(code);
-    backupCodeIndex = backupCodes.findIndex((storedHash) =>
-      safeEqual(storedHash, inputHash),
-    );
-  }
-
-  if (!isValidTotp && backupCodeIndex === -1) {
-    appAssert(false, UNAUTHORIZED, "Invalid MFA code");
-  }
-
-  if (isValidTotp && lastUsedStep === currentStep) {
-    appAssert(false, UNAUTHORIZED, "Code already used");
   }
 };
 
 export const assertMfaEnabled = (user: any) => {
-  appAssert(user.mfa.enabled, BAD_REQUEST, "MFA is not enabled");
+  appAssert(
+    user.mfa.enabled,
+    BAD_REQUEST,
+    ErrorMessages.InvalidCredentials,
+    AppErrorCode.InvalidCredentials,
+  );
 };
 
 export const assertPasswordValid = async (user: any, password: string) => {
   const isValid = await user.comparePassword(password);
-  appAssert(isValid, UNAUTHORIZED, "Invalid password");
+
+  appAssert(
+    isValid,
+    UNAUTHORIZED,
+    ErrorMessages.InvalidCredentials,
+    AppErrorCode.InvalidCredentials,
+  );
+};
+
+export const findMatchingBackupCode = (code: string, backupCodes: string[]) => {
+  const inputHash = hashSecret(code);
+
+  return backupCodes.find((storedHash) => safeEqual(storedHash, inputHash));
 };

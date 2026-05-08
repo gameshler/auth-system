@@ -27,7 +27,6 @@ import {
   fifteenminutesFromNow,
   fiveMinutesAgo,
   fiveminutesFromNow,
-  sevenDaysFromNow,
   tenminutesFromNow,
 } from "../../shared/utils/date";
 import {
@@ -51,8 +50,8 @@ export const createAccount = async (params: CreateAccountParams) => {
   appAssert(
     !existingUser,
     CONFLICT,
-    ErrorMessages.EmailInUse,
-    AppErrorCode.EmailInUse,
+    ErrorMessages.InvalidCredentials,
+    AppErrorCode.InvalidCredentials,
   );
 
   const user = await UserModel.create({
@@ -156,17 +155,17 @@ export const refreshUserAccessToken = async (refreshToken: string) => {
     AppErrorCode.InvalidSession,
   );
   const session = await sessionModel.findById(payload.sessionId);
+  const now = Date.now();
   appAssert(
     session,
     UNAUTHORIZED,
     ErrorMessages.InvalidSession,
     AppErrorCode.InvalidSession,
   );
-  const now = Date.now();
   appAssert(
     session.expiresAt.getTime() > now,
     UNAUTHORIZED,
-    ErrorMessages.SessionExpired,
+    ErrorMessages.InvalidSession,
     AppErrorCode.SessionExpired,
   );
   const valid = session.refreshToken === hashCode(refreshToken);
@@ -182,8 +181,23 @@ export const refreshUserAccessToken = async (refreshToken: string) => {
   };
 
   const newRefreshToken = signToken(sessionInfo, refreshTokenSignOptions);
-  session.refreshToken = hashCode(newRefreshToken);
-  session.expiresAt = sevenDaysFromNow();
+  const updated = await sessionModel.findOneAndUpdate(
+    {
+      _id: payload.sessionId,
+      refreshToken: hashCode(refreshToken),
+    },
+    {
+      refreshToken: hashCode(newRefreshToken),
+    },
+    { returnDocument: "after" },
+  );
+
+  appAssert(
+    updated,
+    UNAUTHORIZED,
+    ErrorMessages.InvalidSession,
+    AppErrorCode.InvalidSession,
+  );
 
   const user = await UserModel.findById(session.userId);
   appAssert(
@@ -215,7 +229,7 @@ export const verifyEmail = async (code: string) => {
   appAssert(
     validCode,
     NOT_FOUND,
-    ErrorMessages.VerificationFailed,
+    ErrorMessages.InvalidOrExpiredToken,
     AppErrorCode.VerificationFailed,
   );
   const updatedUser = await UserModel.findByIdAndUpdate(
@@ -228,8 +242,8 @@ export const verifyEmail = async (code: string) => {
   appAssert(
     updatedUser,
     INTERNAL_SERVER_ERROR,
-    ErrorMessages.ServerError,
-    AppErrorCode.ServerError,
+    ErrorMessages.AccountOperationFailed,
+    AppErrorCode.VerificationFailed,
   );
   await validCode.deleteOne();
   return {
@@ -243,8 +257,8 @@ export const sendPasswordResetEmail = async (params: ForgotPasswordParams) => {
   appAssert(
     user,
     NOT_FOUND,
-    ErrorMessages.AccountNotFound,
-    AppErrorCode.AccountNotFound,
+    ErrorMessages.InvalidCredentials,
+    AppErrorCode.InvalidCredentials,
   );
   const fiveMinAgo = fiveMinutesAgo();
   const count = await verificationCodeModel.countDocuments({
@@ -304,7 +318,7 @@ export const resetPassword = async (params: ResetPasswordParams) => {
   appAssert(
     validCode,
     NOT_FOUND,
-    ErrorMessages.VerificationFailed,
+    ErrorMessages.InvalidOrExpiredToken,
     AppErrorCode.VerificationFailed,
   );
   const user = await UserModel.findById(validCode.userId);
@@ -312,8 +326,8 @@ export const resetPassword = async (params: ResetPasswordParams) => {
   appAssert(
     user,
     NOT_FOUND,
-    ErrorMessages.AccountNotFound,
-    AppErrorCode.AccountNotFound,
+    ErrorMessages.InvalidOrExpiredToken,
+    AppErrorCode.VerificationFailed,
   );
   user.password = password;
   await user.save();
@@ -343,7 +357,7 @@ export const deleteUserAccount = async (params: UserParams) => {
   appAssert(
     deletedUser,
     INTERNAL_SERVER_ERROR,
-    ErrorMessages.ServerError,
+    ErrorMessages.AccountOperationFailed,
     AppErrorCode.ServerError,
   );
 

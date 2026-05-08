@@ -19,8 +19,8 @@ const authenticate: RequestHandler = (req, res, next) => {
     payload,
     UNAUTHORIZED,
     error === "jwt expired"
-      ? ErrorMessages.TokenExpired
-      : ErrorMessages.InvalidToken,
+      ? ErrorMessages.InvalidSession
+      : ErrorMessages.InvalidSession,
     AppErrorCode.InvalidToken,
   );
   req.userId = payload.userId;

@@ -10,8 +10,8 @@ export const getUserHandler = catchErrors(async (req, res) => {
   appAssert(
     user,
     NOT_FOUND,
-    ErrorMessages.AccountNotFound,
-    AppErrorCode.AccountNotFound,
+    ErrorMessages.AccountOperationFailed,
+    AppErrorCode.NotFound,
   );
   return res.status(OK).json({ user: user.omitPassword() });
 });

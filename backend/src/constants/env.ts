@@ -15,3 +15,4 @@ export const JWT_REFRESH_SECRET = getEnv("JWT_REFRESH_SECRET");
 export const EMAIL_SENDER = getEnv("EMAIL_SENDER");
 export const RESEND_API_KEY = getEnv("RESEND_API_KEY");
 export const MFA_ENCRYPTION_KEY = getEnv("MFA_ENCRYPTION_KEY");
+export const CSRF_SECRET = getEnv("CSRF_SECRET");

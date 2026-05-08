@@ -1,21 +1,24 @@
 const Messages = () => ({
-  InvalidCredentials: "Invalid email or password",
+  // Auth 
+  InvalidCredentials: "Invalid credentials",
 
-  Unauthorized: "You are not allowed to perform this action",
+  // Authorization
+  Unauthorized: "Unauthorized",
   Forbidden: "Access denied",
 
-  SessionExpired: "Your session has expired, please sign in again",
+  // Session
   InvalidSession: "Please sign in again",
 
-  EmailInUse: "An account with this email already exists",
-  AccountNotFound: "Unable to process request",
+  // Account-related operations
+  AccountOperationFailed: "Process failed",
 
-  InvalidToken: "Invalid or expired link",
-  TokenExpired: "Invalid or expired link",
-  VerificationFailed: "Verification failed",
+  // Tokens
+  InvalidOrExpiredToken: "Invalid or expired link",
 
+  // Rate limiting
   TooManyRequests: "Too many attempts, please try again later",
 
+  // General
   NotFound: "Not found",
   ServerError: "Something went wrong, please try again later",
 });

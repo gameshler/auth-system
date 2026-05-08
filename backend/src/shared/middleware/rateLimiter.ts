@@ -64,11 +64,11 @@ export const verifyCodeLimiter: RateLimitRequestHandler = rateLimit({
 
 export const mfaLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 3,
+  limit: 4,
   ...baseConfig,
   keyGenerator: (req) => {
     const challengeId = req.body.challengeId;
-    const ip = ipKeyGenerator(req.ip || "");
+    const ip = ipKeyGenerator(req.ip || "unknown");
     return `${ip}-${challengeId}`;
   },
 });

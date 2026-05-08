@@ -24,6 +24,7 @@ export interface UserDocument extends mongoose.Document {
     lastUsedStep?: number;
     failedAttempts: number;
     lockoutUntil?: Date;
+    tempSecretCreatedAt: Date;
   };
   role: Role;
 

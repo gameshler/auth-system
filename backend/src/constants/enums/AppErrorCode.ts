@@ -1,6 +1,10 @@
 const enum AppErrorCode {
   // Auth
   InvalidCredentials = "invalid_credentials",
+  InvalidMfaCode = "invalid_mfa_code",
+  MfaAlreadyEnabled = "mfa_already_enabled",
+
+  // Authorization
   Unauthorized = "unauthorized",
   Forbidden = "forbidden",
 
@@ -8,15 +12,12 @@ const enum AppErrorCode {
   SessionExpired = "session_expired",
   InvalidSession = "session_invalid",
 
-  // Account
-  EmailInUse = "email_in_use",
-  AccountNotFound = "account_not_found",
-
-  // Tokens / verification
+  // Tokens
   InvalidToken = "invalid_token",
+  TokenExpired = "token_expired",
   VerificationFailed = "verification_failed",
 
-  // Rate limiting
+  // Abuse protection
   TooManyRequests = "too_many_requests",
 
   // General

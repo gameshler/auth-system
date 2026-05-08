@@ -10,6 +10,7 @@ import {
 import { mfaLimiter } from "../../../shared/middleware/rateLimiter";
 import authorize from "../../../shared/middleware/authorize";
 import Permission from "../../../constants/enums/permissions";
+import { csrfProtection } from "../../../shared/middleware/csrf";
 
 const mfaRoutes = Router();
 
@@ -23,6 +24,7 @@ mfaRoutes.get(
 mfaRoutes.post(
   "/verify-setup",
   authenticate,
+  csrfProtection,
   authorize(Permission.MFA_SETUP_SELF),
   mfaLimiter,
   verifyMfaSetupHandler,
@@ -30,6 +32,7 @@ mfaRoutes.post(
 mfaRoutes.delete(
   "/disable",
   authenticate,
+  csrfProtection,
   authorize(Permission.MFA_DISABLE_SELF),
   mfaLimiter,
   disableMfaHandler,
@@ -37,6 +40,7 @@ mfaRoutes.delete(
 mfaRoutes.post(
   "/backup-codes",
   authenticate,
+  csrfProtection,
   authorize(Permission.MFA_MANAGE_BACKUP_CODES_SELF),
   mfaLimiter,
   regenerateBackupCodesHandler,

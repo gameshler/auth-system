@@ -8,6 +8,7 @@ declare global {
       sessionId: mongoose.Types.ObjectId;
       role: Role;
       verified: boolean;
+      csrfToken: () => string;
     }
   }
 }

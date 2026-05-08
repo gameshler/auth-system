@@ -22,13 +22,14 @@ import authorize from "../../shared/middleware/authorize";
 import Permission from "../../constants/enums/permissions";
 import mfaRoutes from "./mfa/mfa.route";
 import sessionRoutes from "./session/session.route";
+import { csrfProtection } from "../../shared/middleware/csrf";
 
 const authRoutes = Router();
 
 authRoutes.post("/register", registerLimiter, registerHandler);
 authRoutes.post("/login", loginLimiter, loginHandler);
 authRoutes.post("/refresh", refreshLimiter, refreshHandler);
-authRoutes.post("/logout", authenticate, logoutHandler);
+authRoutes.post("/logout", logoutHandler);
 authRoutes.get("/email/verify/:code", verifyCodeLimiter, verifyEmailHandler);
 authRoutes.post(
   "/password/forgot",
@@ -39,6 +40,7 @@ authRoutes.post("/password/reset", passwordResetLimiter, resetPasswordHandler);
 authRoutes.delete(
   "/delete-account",
   authenticate,
+  csrfProtection,
   authorize(Permission.ACCOUNT_DELETE_SELF),
   deleteLimiter,
   deleteAccountHandler,

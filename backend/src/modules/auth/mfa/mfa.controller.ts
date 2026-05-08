@@ -9,9 +9,9 @@ import catchErrors from "../../../shared/utils/catchErrors";
 import { OK } from "../../../constants/http";
 import { mfaLoginSchema, mfaSchema, mfaSetupVerifySchema } from "./mfa.schemas";
 import {
-  clearAuthCookies,
-  setAuthCookies,
-} from "../../../shared/utils/cookies";
+  clearAllAuthAndCsrfCookies,
+  setAuthCookiesAndCsrf,
+} from "../../../shared/middleware/csrf";
 
 export const generateMfaSetupHandler = catchErrors(async (req, res) => {
   const userId = req.userId;
@@ -36,20 +36,16 @@ export const verifyMfaLoginHandler = catchErrors(async (req, res) => {
   });
   const { accessToken, refreshToken, user } = await verifyMfaLogin(request);
 
-  return setAuthCookies({ res, accessToken, refreshToken }).status(OK).json({
-    message: "Login successful",
-    user,
-  });
+  const csrfToken = setAuthCookiesAndCsrf(req, res, accessToken, refreshToken);
+  return res.status(OK).json({ message: "Login successful", user, csrfToken });
 });
 
 export const disableMfaHandler = catchErrors(async (req, res) => {
   const userId = req.userId;
   const { password } = mfaSchema.parse(req.body);
   await disableMfa({ userId, password });
-
-  return clearAuthCookies(res).status(OK).json({
-    message: "MFA disabled Please log in again.",
-  });
+  clearAllAuthAndCsrfCookies(res);
+  return res.status(OK).json({ message: "MFA disabled Please log in again." });
 });
 
 export const regenerateBackupCodesHandler = catchErrors(async (req, res) => {

@@ -6,6 +6,7 @@ import {
 } from "../../../shared/middleware/rateLimiter";
 import authorize from "../../../shared/middleware/authorize";
 import Permission from "../../../constants/enums/permissions";
+import { csrfProtection } from "../../../shared/middleware/csrf";
 
 const sessionRoutes = Router();
 
@@ -17,6 +18,7 @@ sessionRoutes.get(
 );
 sessionRoutes.delete(
   "/:id",
+  csrfProtection,
   authorize(Permission.SESSION_DELETE_SELF),
   deleteSessionLimiter,
   deleteSessionHandler,

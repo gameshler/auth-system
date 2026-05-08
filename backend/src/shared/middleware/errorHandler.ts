@@ -30,6 +30,7 @@ const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
   };
   logger.error("Request error", {
     ...requestMeta,
+    errorCode: error.errorCode,
     message: error.message,
     stack: error.stack,
   });

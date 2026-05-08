@@ -1,14 +1,27 @@
 import z from "zod";
 
+export const totpCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{6,8}$/);
+
+export const backupCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9-]{8,64}$/);
+
 export const mfaSetupVerifySchema = z.object({
-  code: z.string().min(6).max(8),
+  code: totpCodeSchema,
 });
 
 export const mfaLoginSchema = z.object({
-  challengeId: z.string(),
-  code: z.string().min(6).max(8),
+  challengeId: z
+    .string()
+    .length(24)
+    .regex(/^[a-f\d]{24}$/i),
+  code: z.string().trim().min(6).max(8),
 });
 
 export const mfaSchema = z.object({
-  password: z.string().min(12).max(25),
+  password: z.string().min(12).max(128),
 });

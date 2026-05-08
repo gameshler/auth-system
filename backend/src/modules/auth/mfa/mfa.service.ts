@@ -4,8 +4,8 @@ import { createAuthenticatedSession } from "../auth.helpers";
 import {
   decryptSecret,
   encryptSecret,
-  hashSecret,
   generateBackupCodes,
+  hashSecret,
 } from "../../../shared/utils/crypto";
 import {
   DisableMfaParams,
@@ -15,16 +15,19 @@ import {
   UserParams,
 } from "../../../constants/types/params.types";
 import {
+  consumeBackupCode,
   consumeSuccessfulLogin,
-  disableMultifa,
+  disableMfaInternal,
   enableMfa,
   getUserForDisableMfa,
   getUserForMfaLogin,
   getUserForMfaSetup,
   getUserWithTempSecret,
   getValidChallenge,
+  registerFailedMfaAttempt,
   setTempSecret,
   updateBackupCodes,
+  updateLastUsedStep,
 } from "./mfa.db";
 import {
   assertMfaEnabled,
@@ -32,15 +35,19 @@ import {
   assertNotLocked,
   assertPasswordValid,
   assertTempSecretExists,
-  assertValidCode,
-  assertValidTotp,
+  findMatchingBackupCode,
+  verifyTotpOrThrow,
 } from "./mfa.assertions";
-
-const getTotpStep = () => Math.floor(Date.now() / 30000);
+import appAssert from "../../../shared/utils/appAssert";
+import { UNAUTHORIZED } from "../../../constants/http";
+import { ErrorMessages } from "../../../shared/utils/errorMessages";
+import AppErrorCode from "../../../constants/enums/AppErrorCode";
 
 export const generateMfaSetup = async (params: UserParams) => {
   const { userId } = params;
+
   const user = await getUserForMfaSetup(userId);
+
   assertMfaNotEnabled(user);
 
   const secret = speakeasy.generateSecret({
@@ -49,48 +56,103 @@ export const generateMfaSetup = async (params: UserParams) => {
   });
 
   const encryptedSecret = encryptSecret(secret.base32);
+
   await setTempSecret(userId, encryptedSecret);
 
   const qrImageUrl = await qrcode.toDataURL(secret.otpauth_url!);
-  return { qrImageUrl, manualKey: secret.base32 };
+
+  return {
+    qrImageUrl,
+    manualKey: secret.base32,
+  };
 };
 
 export const verifyMfaSetup = async (params: MfaSetupParams) => {
   const { userId, code } = params;
+
   const user = await getUserWithTempSecret(userId);
+
   assertTempSecretExists(user);
 
   const decryptedSecret = decryptSecret(user.mfa.tempSecret!);
-  assertValidTotp(decryptedSecret, code);
+
+  const verifiedStep = verifyTotpOrThrow(
+    decryptedSecret,
+    code,
+    user.mfa.lastUsedStep ?? 0,
+  );
 
   const plainBackups = generateBackupCodes();
+
   const hashedBackups = plainBackups.map(hashSecret);
 
   await enableMfa(userId, {
     secret: user.mfa.tempSecret!,
     backupCodes: hashedBackups,
-    lastUsedStep: getTotpStep(),
+    lastUsedStep: verifiedStep,
   });
 
-  return { backupCodes: plainBackups, user: user.omitPassword() };
+  return {
+    backupCodes: plainBackups,
+    user: user.omitPassword(),
+  };
 };
 
 export const verifyMfaLogin = async (params: MfaLoginParams) => {
   const { challengeId, code, userAgent, ip } = params;
 
   const challenge = await getValidChallenge(challengeId);
+
   const user = await getUserForMfaLogin(challenge.userId);
 
   assertNotLocked(user);
-  assertValidCode(
-    code,
-    decryptSecret(user.mfa.secret!),
-    user.mfa.backupCodes,
-    user.mfa.lastUsedStep ?? 0,
-    getTotpStep(),
-  );
 
-  await consumeSuccessfulLogin(user._id!, challengeId, code);
+  let verifiedStep: number | null = null;
+
+  const decryptedSecret = decryptSecret(user.mfa.secret!);
+
+  const currentStep = Math.floor(Date.now() / 30000);
+
+  const totpResult = speakeasy.totp.verifyDelta({
+    secret: decryptedSecret,
+    encoding: "base32",
+    token: code,
+    window: 1,
+  });
+
+  if (totpResult) {
+    verifiedStep = currentStep + totpResult.delta;
+
+    if (verifiedStep <= (user.mfa.lastUsedStep ?? 0)) {
+      await registerFailedMfaAttempt(user._id!);
+
+      appAssert(
+        false,
+        UNAUTHORIZED,
+        ErrorMessages.InvalidOrExpiredToken,
+        AppErrorCode.InvalidMfaCode,
+      );
+    }
+
+    await updateLastUsedStep(user._id!, verifiedStep);
+  } else {
+    const matchedBackup = findMatchingBackupCode(code, user.mfa.backupCodes);
+
+    if (!matchedBackup) {
+      await registerFailedMfaAttempt(user._id!);
+
+      appAssert(
+        false,
+        UNAUTHORIZED,
+        ErrorMessages.InvalidOrExpiredToken,
+        AppErrorCode.InvalidMfaCode,
+      );
+    }
+
+    await consumeBackupCode(user._id!, matchedBackup);
+  }
+
+  await consumeSuccessfulLogin(user._id!, challengeId);
 
   const { accessToken, refreshToken } = await createAuthenticatedSession({
     userId: user._id!,
@@ -109,22 +171,32 @@ export const verifyMfaLogin = async (params: MfaLoginParams) => {
 
 export const disableMfa = async (params: DisableMfaParams) => {
   const { userId, password } = params;
+
   const user = await getUserForDisableMfa(userId);
+
   assertMfaEnabled(user);
+
   await assertPasswordValid(user, password);
 
-  await disableMultifa(userId);
+  await disableMfaInternal(userId);
 };
 
 export const regenerateBackupCodes = async (params: RegenBackupCodesParams) => {
   const { userId, password } = params;
+
   const user = await getUserForDisableMfa(userId);
+
   assertMfaEnabled(user);
+
   await assertPasswordValid(user, password);
 
   const plainBackups = generateBackupCodes();
+
   const hashedBackups = plainBackups.map(hashSecret);
 
   await updateBackupCodes(userId, hashedBackups);
-  return { backupCodes: plainBackups };
+
+  return {
+    backupCodes: plainBackups,
+  };
 };

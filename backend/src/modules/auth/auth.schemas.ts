@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { FilterXSS } from "xss";
+
+const xssFilter = new FilterXSS();
 
 const emailSchema = z
   .string()
@@ -18,6 +21,14 @@ const passwordSchema = z
 const userAgentSchema = z.string().optional();
 const ipSchema = z.string().optional();
 
+const sanitizedString = (min: number, max: number, errorLabel: string) =>
+  z
+    .string()
+    .trim()
+    .min(min, { message: `${errorLabel} is required` })
+    .max(max, { message: `${errorLabel} is too long` })
+    .transform((val) => xssFilter.process(val));
+
 export const loginSchema = z
   .object({
     email: emailSchema,
@@ -30,11 +41,7 @@ export const loginSchema = z
 export const registerSchema = z
   .object({
     email: emailSchema,
-    fullName: z
-      .string()
-      .trim()
-      .min(3, { error: "Full name is required" })
-      .max(50, { error: "Full name is too long" }),
+    fullName: sanitizedString(3, 50, "Full name"),
     password: passwordSchema,
     confirmPassword: z.string(),
     userAgent: userAgentSchema,

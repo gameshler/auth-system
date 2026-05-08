@@ -5,14 +5,16 @@ import {
   OK,
   UNAUTHORIZED,
 } from "../../constants/http";
+import {
+  clearAllAuthAndCsrfCookies,
+  setAuthCookiesAndCsrf,
+} from "../../shared/middleware/csrf";
 import sessionModel from "../../shared/models/session";
 import appAssert from "../../shared/utils/appAssert";
 import catchErrors from "../../shared/utils/catchErrors";
 import {
-  clearAuthCookies,
   getAccessTokenCookieOptions,
   getRefreshTokenCookieOptions,
-  setAuthCookies,
 } from "../../shared/utils/cookies";
 import { ErrorMessages } from "../../shared/utils/errorMessages";
 import { verifyToken } from "../../shared/utils/jwt";
@@ -42,9 +44,8 @@ export const registerHandler = catchErrors(async (req, res) => {
 
   const { user, accessToken, refreshToken } = await createAccount(request);
 
-  return setAuthCookies({ res, accessToken, refreshToken })
-    .status(CREATED)
-    .json(user);
+  const csrfToken = setAuthCookiesAndCsrf(req, res, accessToken, refreshToken);
+  return res.status(CREATED).json({ user, csrfToken });
 });
 
 export const loginHandler = catchErrors(async (req, res) => {
@@ -61,14 +62,14 @@ export const loginHandler = catchErrors(async (req, res) => {
       challengeId: result.challengeId,
     });
   }
-
-  return setAuthCookies({
+  const csrfToken = setAuthCookiesAndCsrf(
+    req,
     res,
-    accessToken: result.accessToken,
-    refreshToken: result.refreshToken,
-  })
-    .status(OK)
-    .json({ message: "Login successful" });
+    result.accessToken,
+    result.refreshToken,
+  );
+
+  return res.status(OK).json({ message: "Login successful", csrfToken });
 });
 
 export const logoutHandler = catchErrors(async (req, res) => {
@@ -77,9 +78,8 @@ export const logoutHandler = catchErrors(async (req, res) => {
   if (payload) {
     await sessionModel.findByIdAndDelete(payload.sessionId);
   }
-  return clearAuthCookies(res)
-    .status(OK)
-    .json({ message: "Logout successful" });
+  clearAllAuthAndCsrfCookies(res);
+  return res.status(OK).json({ message: "Logout successful" });
 });
 
 export const refreshHandler = catchErrors(async (req, res) => {
@@ -129,9 +129,10 @@ export const resetPasswordHandler = catchErrors(async (req, res) => {
     ip: req.ip,
   });
   await resetPassword(request);
-  return clearAuthCookies(res)
+  clearAllAuthAndCsrfCookies(res);
+  return res
     .status(OK)
-    .json({ message: "Password reset Successful" });
+    .json({ message: "Password reset successful. Please login again." });
 });
 
 export const deleteAccountHandler = catchErrors(async (req, res) => {
@@ -141,12 +142,9 @@ export const deleteAccountHandler = catchErrors(async (req, res) => {
   appAssert(
     deletedUser,
     INTERNAL_SERVER_ERROR,
-    ErrorMessages.ServerError,
+    ErrorMessages.AccountOperationFailed,
     AppErrorCode.ServerError,
   );
-
-  return clearAuthCookies(res).status(OK).json({
-    message: "Account deleted successfully",
-    user: deletedUser,
-  });
+  clearAllAuthAndCsrfCookies(res);
+  return res.status(OK).json({ message: "Account deleted successfully" });
 });
