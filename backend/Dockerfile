@@ -4,7 +4,7 @@ FROM node:25-alpine AS base
 
 WORKDIR /app
 
-RUN npm install -g pnpm@10.33.2
+RUN npm install -g pnpm@11.0.9
 
 COPY package.json pnpm-lock.yaml ./
 
@@ -38,7 +38,7 @@ FROM node:25-alpine AS production
 
 WORKDIR /app
 
-RUN npm install -g pnpm@10.33.2
+RUN npm install -g pnpm@11.0.9
 
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --prod --frozen-lockfile

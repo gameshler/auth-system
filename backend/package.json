@@ -5,12 +5,10 @@
   "scripts": {
     "build": "tsc && cp package.json dist/package.json",
     "start": "node ./dist/core/index.js",
-    "start:dev": "ts-node-dev --respawn --transpile-only --poll --files ./src/core/index.ts",
-    "lint": "tsc --noEmit",
-    "type-check": "tsc --noEmit"
+    "start:dev": "ts-node-dev --respawn --transpile-only --poll --files ./src/core/index.ts"
   },
   "license": "ISC",
-  "packageManager": "pnpm@10.33.2",
+  "packageManager": "pnpm@11.0.9",
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
@@ -27,7 +25,6 @@
     "speakeasy": "^2.0.0",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0",
-    "xss": "^1.0.15",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -35,7 +32,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.6.2",
     "@types/qrcode": "^1.5.6",
     "@types/speakeasy": "^2.0.10",
     "ts-node-dev": "^2.0.0",

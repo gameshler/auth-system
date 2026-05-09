@@ -19,9 +19,9 @@ export const mfaLoginSchema = z.object({
     .string()
     .length(24)
     .regex(/^[a-f\d]{24}$/i),
-  code: z.string().trim().min(6).max(8),
+  code: z.union([totpCodeSchema, backupCodeSchema]),
 });
 
 export const mfaSchema = z.object({
-  password: z.string().min(12).max(128),
+  password: z.string().min(12).max(30),
 });
