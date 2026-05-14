@@ -29,7 +29,7 @@ export const limiter: RateLimitRequestHandler = rateLimit({
 
 export const loginLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
-  limit: 5,
+  limit: 6,
   ...baseConfig,
   keyGenerator: (req) => {
     const email = req.body.email;
@@ -40,7 +40,7 @@ export const loginLimiter: RateLimitRequestHandler = rateLimit({
 
 export const registerLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  limit: 3,
+  limit: 5,
   ...baseConfig,
 });
 
@@ -64,7 +64,7 @@ export const verifyCodeLimiter: RateLimitRequestHandler = rateLimit({
 
 export const mfaLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 4,
+  limit: 5,
   ...baseConfig,
   keyGenerator: (req) => {
     const challengeId = req.body.challengeId;

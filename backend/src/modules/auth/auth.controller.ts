@@ -30,6 +30,7 @@ import {
   deleteUserAccount,
   loginUser,
   refreshUserAccessToken,
+  resendVerificationEmail,
   resetPassword,
   sendPasswordResetEmail,
   verifyEmail,
@@ -57,9 +58,9 @@ export const loginHandler = catchErrors(async (req, res) => {
   const result = await loginUser(request);
   if (result.mfaRequired) {
     return res.status(OK).json({
-      message: result.message,
       mfaRequired: true,
       challengeId: result.challengeId,
+      message: result.message,
     });
   }
   const csrfToken = setAuthCookiesAndCsrf(
@@ -75,9 +76,11 @@ export const loginHandler = catchErrors(async (req, res) => {
 export const logoutHandler = catchErrors(async (req, res) => {
   const accessToken = req.cookies.accessToken;
   const { payload } = verifyToken(accessToken);
-  if (payload) {
-    await sessionModel.findByIdAndDelete(payload.sessionId);
+
+  if (payload?.sessionId) {
+    await sessionModel.deleteOne({ _id: payload.sessionId });
   }
+
   clearAllAuthAndCsrfCookies(res);
   return res.status(OK).json({ message: "Logout successful" });
 });
@@ -93,15 +96,13 @@ export const refreshHandler = catchErrors(async (req, res) => {
   );
   const { accessToken, newRefreshToken } =
     await refreshUserAccessToken(refreshToken);
+  res.cookie("accessToken", accessToken, getAccessTokenCookieOptions());
   if (newRefreshToken) {
     res.cookie("refreshToken", newRefreshToken, getRefreshTokenCookieOptions());
   }
-  return res
-    .status(OK)
-    .cookie("accessToken", accessToken, getAccessTokenCookieOptions())
-    .json({
-      message: "Access Token Refreshed",
-    });
+  return res.status(OK).json({
+    message: "Access Token Refreshed",
+  });
 });
 
 export const verifyEmailHandler = catchErrors(async (req, res) => {
@@ -110,6 +111,22 @@ export const verifyEmailHandler = catchErrors(async (req, res) => {
   await verifyEmail(verificationCode);
 
   return res.status(OK).json({ message: "Email was successfully verified" });
+});
+
+export const resendVerificationEmailHandler = catchErrors(async (req, res) => {
+  const userId = req.userId;
+
+  const email = await resendVerificationEmail({ userId });
+  appAssert(
+    email,
+    INTERNAL_SERVER_ERROR,
+    ErrorMessages.AccountOperationFailed,
+    AppErrorCode.ServerError,
+  );
+
+  return res.status(OK).json({
+    message: "Verification email sent successfully",
+  });
 });
 
 export const sendPasswordResetHandler = catchErrors(async (req, res) => {

@@ -13,6 +13,7 @@ import {
   logoutHandler,
   refreshHandler,
   registerHandler,
+  resendVerificationEmailHandler,
   resetPasswordHandler,
   sendPasswordResetHandler,
   verifyEmailHandler,
@@ -26,17 +27,36 @@ import { csrfProtection } from "../../shared/middleware/csrf";
 
 const authRoutes = Router();
 
+// Auth
+
 authRoutes.post("/register", registerLimiter, registerHandler);
 authRoutes.post("/login", loginLimiter, loginHandler);
-authRoutes.post("/refresh", refreshLimiter, refreshHandler);
 authRoutes.post("/logout", logoutHandler);
+authRoutes.post("/refresh", refreshLimiter, refreshHandler);
+authRoutes.use("/2fa", mfaRoutes);
+authRoutes.use("/sessions", authenticate, sessionRoutes);
+
+// Email
+
+authRoutes.post(
+  "/email/verify",
+  authenticate,
+  csrfProtection,
+  authorize(Permission.USER_VERIFY_SELF),
+  verifyCodeLimiter,
+  resendVerificationEmailHandler,
+);
 authRoutes.get("/email/verify/:code", verifyCodeLimiter, verifyEmailHandler);
+
+// Password
+
 authRoutes.post(
   "/password/forgot",
   passwordResetLimiter,
   sendPasswordResetHandler,
 );
 authRoutes.post("/password/reset", passwordResetLimiter, resetPasswordHandler);
+
 authRoutes.delete(
   "/delete-account",
   authenticate,
@@ -45,8 +65,5 @@ authRoutes.delete(
   deleteLimiter,
   deleteAccountHandler,
 );
-
-authRoutes.use("/2fa", mfaRoutes);
-authRoutes.use("/sessions", authenticate, sessionRoutes);
 
 export default authRoutes;

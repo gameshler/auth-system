@@ -3,6 +3,7 @@ const enum AppErrorCode {
   InvalidCredentials = "invalid_credentials",
   InvalidMfaCode = "invalid_mfa_code",
   MfaAlreadyEnabled = "mfa_already_enabled",
+  AlreadyVerified = "already_verified",
 
   // Authorization
   Unauthorized = "unauthorized",

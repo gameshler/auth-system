@@ -9,7 +9,7 @@ import { ErrorMessages } from "../../../shared/utils/errorMessages";
 import AppErrorCode from "../../../constants/enums/AppErrorCode";
 
 export const getUserForMfaSetup = async (userId: mongoose.Types.ObjectId) => {
-  const user = await UserModel.findById(userId);
+  const user = await UserModel.findById(userId).lean();
 
   appAssert(
     user,
@@ -25,10 +25,15 @@ export const setTempSecret = async (
   userId: mongoose.Types.ObjectId,
   tempSecret: string,
 ) => {
-  await UserModel.findByIdAndUpdate(userId, {
-    "mfa.tempSecret": tempSecret,
-    "mfa.tempSecretCreatedAt": new Date(),
-  });
+  await UserModel.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        "mfa.tempSecret": tempSecret,
+        "mfa.tempSecretCreatedAt": new Date(),
+      },
+    },
+  );
 };
 
 export const getUserWithTempSecret = async (
@@ -50,29 +55,32 @@ export const getUserWithTempSecret = async (
 
 export const enableMfa = async (
   userId: mongoose.Types.ObjectId,
-  mfaData: {
-    secret: string;
-    backupCodes: string[];
-    lastUsedStep: number;
-  },
+  mfaData: { secret: string; backupCodes: string[]; lastUsedStep: number },
 ) => {
-  await UserModel.findByIdAndUpdate(userId, {
-    "mfa.enabled": true,
-    "mfa.secret": mfaData.secret,
-    "mfa.tempSecret": undefined,
-    "mfa.backupCodes": mfaData.backupCodes,
-    "mfa.lastUsedStep": mfaData.lastUsedStep,
-    "mfa.failedAttempts": 0,
-    "mfa.lockoutUntil": null,
-  });
+  await UserModel.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        "mfa.enabled": true,
+        "mfa.secret": mfaData.secret,
+        "mfa.backupCodes": mfaData.backupCodes,
+        "mfa.lastUsedStep": mfaData.lastUsedStep,
+        "mfa.failedAttempts": 0,
+        "mfa.lockoutUntil": null,
+      },
+      $unset: { "mfa.tempSecret": "", "mfa.tempSecretCreatedAt": "" },
+    },
+  );
 };
 
 export const getValidChallenge = async (challengeId: string) => {
-  const challenge = await verificationCodeModel.findOne({
-    _id: challengeId,
-    type: verificationCodeType.Mfa_Auth,
-    expiresAt: { $gt: new Date() },
-  });
+  const challenge = await verificationCodeModel
+    .findOne({
+      _id: challengeId,
+      type: verificationCodeType.Mfa_Auth,
+      expiresAt: { $gt: new Date() },
+    })
+    .lean();
 
   appAssert(
     challenge,
@@ -103,10 +111,7 @@ export const consumeSuccessfulLogin = async (
   userId: mongoose.Types.ObjectId,
   challengeId: string,
 ) => {
-  const deleted = await verificationCodeModel.deleteOne({
-    _id: challengeId,
-  });
-
+  const deleted = await verificationCodeModel.deleteOne({ _id: challengeId });
   appAssert(
     deleted.deletedCount === 1,
     UNAUTHORIZED,
@@ -114,31 +119,35 @@ export const consumeSuccessfulLogin = async (
     AppErrorCode.InvalidMfaCode,
   );
 
-  await UserModel.findByIdAndUpdate(userId, {
-    "mfa.failedAttempts": 0,
-    "mfa.lockoutUntil": null,
-  });
+  await UserModel.updateOne(
+    { _id: userId },
+    { $set: { "mfa.failedAttempts": 0, "mfa.lockoutUntil": null } },
+  );
 };
 
 export const registerFailedMfaAttempt = async (
   userId: mongoose.Types.ObjectId,
 ) => {
-  const user = await UserModel.findById(userId).select("+mfa.failedAttempts");
+  const LOCKOUT_THRESHOLD = 5;
+  const LOCKOUT_DURATION = 15 * 60 * 1000;
 
-  if (!user) return;
+  const user = await UserModel.findByIdAndUpdate(
+    userId,
+    { $inc: { "mfa.failedAttempts": 1 } },
+    { returnDocument: "after", select: "mfa.failedAttempts" },
+  );
 
-  const failedAttempts = (user.mfa.failedAttempts || 0) + 1;
-
-  const update: any = {
-    "mfa.failedAttempts": failedAttempts,
-  };
-
-  if (failedAttempts >= 5) {
-    update["mfa.lockoutUntil"] = new Date(Date.now() + 15 * 60 * 1000);
-    update["mfa.failedAttempts"] = 0;
+  if (user && user.mfa.failedAttempts >= LOCKOUT_THRESHOLD) {
+    await UserModel.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          "mfa.lockoutUntil": new Date(Date.now() + LOCKOUT_DURATION),
+          "mfa.failedAttempts": 0,
+        },
+      },
+    );
   }
-
-  await UserModel.findByIdAndUpdate(userId, update);
 };
 
 export const consumeBackupCode = async (
@@ -169,13 +178,14 @@ export const updateLastUsedStep = async (
   userId: mongoose.Types.ObjectId,
   step: number,
 ) => {
-  await UserModel.findByIdAndUpdate(userId, {
-    "mfa.lastUsedStep": step,
-  });
+  await UserModel.updateOne(
+    { _id: userId },
+    { $set: { "mfa.lastUsedStep": step } },
+  );
 };
 
 export const getUserForDisableMfa = async (userId: mongoose.Types.ObjectId) => {
-  const user = await UserModel.findById(userId).select("+password");
+  const user = await UserModel.findById(userId);
 
   appAssert(
     user,
@@ -188,24 +198,30 @@ export const getUserForDisableMfa = async (userId: mongoose.Types.ObjectId) => {
 };
 
 export const disableMfaInternal = async (userId: mongoose.Types.ObjectId) => {
-  await UserModel.findByIdAndUpdate(userId, {
-    "mfa.enabled": false,
-    "mfa.secret": undefined,
-    "mfa.tempSecret": undefined,
-    "mfa.backupCodes": [],
-    "mfa.lastUsedStep": 0,
-    "mfa.failedAttempts": 0,
-    "mfa.lockoutUntil": null,
-  });
-
-  await sessionModel.deleteMany({ userId });
+  await Promise.all([
+    UserModel.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          "mfa.enabled": false,
+          "mfa.backupCodes": [],
+          "mfa.lastUsedStep": 0,
+          "mfa.failedAttempts": 0,
+          "mfa.lockoutUntil": null,
+        },
+        $unset: { "mfa.secret": "", "mfa.tempSecret": "" },
+      },
+    ),
+    sessionModel.deleteMany({ userId }),
+  ]);
 };
 
 export const updateBackupCodes = async (
   userId: mongoose.Types.ObjectId,
   backupCodes: string[],
 ) => {
-  await UserModel.findByIdAndUpdate(userId, {
-    "mfa.backupCodes": backupCodes,
-  });
+  await UserModel.updateOne(
+    { _id: userId },
+    { $set: { "mfa.backupCodes": backupCodes } },
+  );
 };

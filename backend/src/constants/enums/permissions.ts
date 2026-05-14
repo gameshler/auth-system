@@ -1,6 +1,7 @@
 const enum Permission {
   USER_READ_SELF = "user.read.self",
   USER_READ_ANY = "user.read.any",
+  USER_VERIFY_SELF = "user.verify.self",
 
   SESSION_READ_SELF = "session.read.self",
   SESSION_READ_ANY = "session.read.any",

@@ -2,6 +2,7 @@ import AppErrorCode from "../../constants/enums/AppErrorCode";
 import verificationCodeType from "../../constants/enums/verificationCodeTypes";
 import { CLIENT_URL } from "../../constants/env";
 import {
+  BAD_REQUEST,
   CONFLICT,
   INTERNAL_SERVER_ERROR,
   NOT_FOUND,
@@ -27,6 +28,8 @@ import {
   fifteenminutesFromNow,
   fiveMinutesAgo,
   fiveminutesFromNow,
+  ONE_DAY_MS,
+  sevenDaysFromNow,
   tenminutesFromNow,
 } from "../../shared/utils/date";
 import {
@@ -40,8 +43,19 @@ import {
   verifyToken,
 } from "../../shared/utils/jwt";
 import { sendMail } from "../../shared/utils/sendMail";
-import { generateUniqueCode, hashCode } from "../../shared/utils/crypto";
-import { createAuthenticatedSession } from "./auth.helpers";
+import {
+  generateUniqueCode,
+  hashCode,
+  hashToken,
+  safeEqual,
+} from "../../shared/utils/crypto";
+import {
+  consumeVerificationCode,
+  createAuthenticatedSession,
+} from "./auth.helpers";
+import { registerFailedMfaAttempt } from "./mfa/mfa.db";
+import mongoose from "mongoose";
+import Role from "../../constants/enums/roles";
 
 export const createAccount = async (params: CreateAccountParams) => {
   const { fullName, email, password, userAgent, ip } = params;
@@ -62,19 +76,19 @@ export const createAccount = async (params: CreateAccountParams) => {
 
   const userId = user._id;
   const code = generateUniqueCode();
-  await verificationCodeModel.create({
-    userId,
-    code: hashCode(code),
-    type: verificationCodeType.EmailVerification,
-    expiresAt: fifteenminutesFromNow(),
-  });
 
-  const url = `${CLIENT_URL}/email/verify/${code}`;
-
-  await sendMail({
-    to: user.email,
-    ...getVerifyEmailTemplate(url),
-  });
+  await Promise.all([
+    verificationCodeModel.create({
+      userId,
+      code: hashCode(code),
+      type: verificationCodeType.EmailVerification,
+      expiresAt: fifteenminutesFromNow(),
+    }),
+    sendMail({
+      to: user.email,
+      ...getVerifyEmailTemplate(`${CLIENT_URL}/email/verify/${code}`),
+    }),
+  ]);
 
   const { accessToken, refreshToken } = await createAuthenticatedSession({
     userId,
@@ -94,13 +108,32 @@ export const createAccount = async (params: CreateAccountParams) => {
 export const loginUser = async (params: LoginParams): Promise<LoginResult> => {
   const { email, password, userAgent, ip } = params;
   const user = await UserModel.findOne({ email });
-
   appAssert(
-    user && (await user.comparePassword(password)),
+    user,
     UNAUTHORIZED,
     ErrorMessages.InvalidCredentials,
     AppErrorCode.InvalidCredentials,
   );
+  user.checkLockout();
+
+  const isPasswordValid = await user.comparePassword(password);
+
+  if (!isPasswordValid) {
+    await registerFailedMfaAttempt(user._id);
+    appAssert(
+      false,
+      UNAUTHORIZED,
+      ErrorMessages.InvalidCredentials,
+      AppErrorCode.InvalidCredentials,
+    );
+  }
+
+  if (user.mfa.failedAttempts > 0) {
+    await UserModel.updateOne(
+      { _id: user._id },
+      { $set: { "mfa.failedAttempts": 0, "mfa.lockoutUntil": null } },
+    );
+  }
 
   if (user.mfa.enabled) {
     const challenge = await verificationCodeModel.create({
@@ -145,115 +178,207 @@ export const loginUser = async (params: LoginParams): Promise<LoginResult> => {
 };
 
 export const refreshUserAccessToken = async (refreshToken: string) => {
-  const { payload } = verifyToken<RefreshTokenPayload>(refreshToken, {
+  const { payload, error } = verifyToken<RefreshTokenPayload>(refreshToken, {
     secret: refreshTokenSignOptions.secret,
   });
+
   appAssert(
-    payload,
+    !error && payload?.sessionId,
     UNAUTHORIZED,
     ErrorMessages.InvalidSession,
     AppErrorCode.InvalidSession,
   );
-  const session = await sessionModel.findById(payload.sessionId);
-  const now = Date.now();
+
+  const now = new Date();
+  const incomingHash = hashToken(refreshToken);
+
+  const existing = await sessionModel
+    .findById(payload.sessionId)
+    .populate<{
+      userId: { _id: mongoose.Types.ObjectId; role: Role; verified: boolean };
+    }>("userId", "_id role verified")
+    .lean();
+
   appAssert(
-    session,
+    existing && existing.userId,
     UNAUTHORIZED,
     ErrorMessages.InvalidSession,
     AppErrorCode.InvalidSession,
   );
+
+  const expiresAtTime = new Date(existing.expiresAt).getTime();
+
   appAssert(
-    session.expiresAt.getTime() > now,
+    expiresAtTime > now.getTime(),
     UNAUTHORIZED,
     ErrorMessages.InvalidSession,
     AppErrorCode.SessionExpired,
   );
-  const valid = session.refreshToken === hashCode(refreshToken);
-  appAssert(
-    valid,
-    UNAUTHORIZED,
-    ErrorMessages.InvalidSession,
-    AppErrorCode.InvalidSession,
+
+  const user = existing.userId;
+  const isValidCurrentToken = safeEqual(existing.refreshToken, incomingHash);
+  const GRACE_PERIOD_MS = 15000;
+
+  const rotatedTime = existing.tokenRotatedAt
+    ? new Date(existing.tokenRotatedAt).getTime()
+    : 0;
+
+  const tokenNeedsRotation = expiresAtTime - now.getTime() <= ONE_DAY_MS;
+
+  if (!tokenNeedsRotation && isValidCurrentToken) {
+    const accessToken = signToken({
+      userId: user._id,
+      sessionId: existing._id,
+      role: user.role,
+      verified: user.verified,
+    });
+    return { accessToken };
+  }
+
+  const isGracePeriod =
+    existing.previousRefreshToken &&
+    safeEqual(existing.previousRefreshToken, incomingHash) &&
+    now.getTime() - rotatedTime < GRACE_PERIOD_MS;
+
+  if (isGracePeriod) {
+    const accessToken = signToken({
+      userId: user._id,
+      sessionId: existing._id,
+      role: user.role,
+      verified: user.verified,
+    });
+    return { accessToken };
+  }
+
+  if (!isValidCurrentToken && !isGracePeriod) {
+    await sessionModel.deleteOne({ _id: existing._id });
+    appAssert(
+      false,
+      UNAUTHORIZED,
+      ErrorMessages.InvalidSession,
+      AppErrorCode.InvalidSession,
+    );
+  }
+
+  const newRefreshToken = signToken(
+    { sessionId: payload.sessionId },
+    refreshTokenSignOptions,
   );
+  const newHash = hashToken(newRefreshToken);
 
-  const sessionInfo: RefreshTokenPayload = {
-    sessionId: session._id,
-  };
-
-  const newRefreshToken = signToken(sessionInfo, refreshTokenSignOptions);
-  const updated = await sessionModel.findOneAndUpdate(
+  const wasRotated = await sessionModel.updateOne(
+    { _id: existing._id, refreshToken: incomingHash },
     {
-      _id: payload.sessionId,
-      refreshToken: hashCode(refreshToken),
+      $set: {
+        refreshToken: newHash,
+        previousRefreshToken: incomingHash,
+        tokenRotatedAt: now,
+        expiresAt: sevenDaysFromNow(),
+      },
     },
-    {
-      refreshToken: hashCode(newRefreshToken),
-    },
-    { returnDocument: "after" },
   );
 
-  appAssert(
-    updated,
-    UNAUTHORIZED,
-    ErrorMessages.InvalidSession,
-    AppErrorCode.InvalidSession,
-  );
+  if (wasRotated.modifiedCount === 0) {
+    const doubleCheck = await sessionModel.findById(existing._id).lean();
+    const doubleCheckRotatedTime = doubleCheck?.tokenRotatedAt
+      ? new Date(doubleCheck.tokenRotatedAt).getTime()
+      : 0;
 
-  const user = await UserModel.findById(session.userId);
-  appAssert(
-    user,
-    UNAUTHORIZED,
-    ErrorMessages.InvalidSession,
-    AppErrorCode.InvalidSession,
-  );
+    const isConcurrentGrace =
+      doubleCheck &&
+      doubleCheck.previousRefreshToken &&
+      safeEqual(doubleCheck.previousRefreshToken, incomingHash) &&
+      new Date().getTime() - doubleCheckRotatedTime < GRACE_PERIOD_MS;
+
+    appAssert(
+      isConcurrentGrace,
+      UNAUTHORIZED,
+      ErrorMessages.InvalidSession,
+      AppErrorCode.InvalidSession,
+    );
+
+    const accessToken = signToken({
+      userId: user._id,
+      sessionId: existing._id,
+      role: user.role,
+      verified: user.verified,
+    });
+    return { accessToken };
+  }
 
   const accessToken = signToken({
     userId: user._id,
-    sessionId: session._id,
+    sessionId: existing._id,
     role: user.role,
     verified: user.verified,
   });
 
-  return {
-    accessToken,
-    newRefreshToken,
-  };
+  return { accessToken, newRefreshToken };
 };
 
 export const verifyEmail = async (code: string) => {
-  const validCode = await verificationCodeModel.findOne({
-    code: hashCode(code),
-    type: verificationCodeType.EmailVerification,
-    expiresAt: { $gt: new Date() },
-  });
-  appAssert(
-    validCode,
-    NOT_FOUND,
-    ErrorMessages.InvalidOrExpiredToken,
-    AppErrorCode.VerificationFailed,
+  const validCode = await consumeVerificationCode(
+    code,
+    verificationCodeType.EmailVerification,
   );
+
   const updatedUser = await UserModel.findByIdAndUpdate(
     validCode.userId,
-    {
-      verified: true,
-    },
+    { $set: { verified: true } },
     { returnDocument: "after" },
   );
+
   appAssert(
     updatedUser,
     INTERNAL_SERVER_ERROR,
     ErrorMessages.AccountOperationFailed,
     AppErrorCode.VerificationFailed,
   );
-  await validCode.deleteOne();
+
   return {
     user: updatedUser.omitPassword(),
   };
 };
 
+export const resendVerificationEmail = async (params: UserParams) => {
+  const { userId } = params;
+  const user = await UserModel.findById(userId);
+
+  appAssert(user, NOT_FOUND, ErrorMessages.NotFound, AppErrorCode.NotFound);
+
+  appAssert(
+    !user.verified,
+    BAD_REQUEST,
+    ErrorMessages.UserVerified,
+    AppErrorCode.AlreadyVerified,
+  );
+
+  await verificationCodeModel.deleteMany({
+    userId,
+    type: verificationCodeType.EmailVerification,
+  });
+
+  const code = generateUniqueCode();
+
+  await Promise.all([
+    verificationCodeModel.create({
+      userId,
+      code: hashCode(code),
+      type: verificationCodeType.EmailVerification,
+      expiresAt: fifteenminutesFromNow(),
+    }),
+    sendMail({
+      to: user.email,
+      ...getVerifyEmailTemplate(`${CLIENT_URL}/email/verify/${code}`),
+    }),
+  ]);
+
+  return { user: user.omitPassword() };
+};
+
 export const sendPasswordResetEmail = async (params: ForgotPasswordParams) => {
   const { email, userAgent, ip } = params;
-  const user = await UserModel.findOne({ email });
+  const user = await UserModel.findOne({ email }, "_id email").lean();
   appAssert(
     user,
     NOT_FOUND,
@@ -274,52 +399,38 @@ export const sendPasswordResetEmail = async (params: ForgotPasswordParams) => {
   );
   const code = generateUniqueCode();
   const expiresAt = tenminutesFromNow();
-  await verificationCodeModel.create({
-    userId: user._id,
-    type: verificationCodeType.PasswordReset,
-    code: hashCode(code),
-    expiresAt,
-  });
   const url = `${CLIENT_URL}/password/reset?code=${
     code
   }&exp=${expiresAt.getTime()}`;
 
-  const { data } = await sendMail({
-    to: user.email,
-    ...getSecurityAlertTemplate({
-      email: user.email,
-      title: "Password Reset Requested",
-      action: "A password reset was requested for your account",
-      resetPasswordUrl: url,
-      ip,
-      userAgent,
+  await Promise.all([
+    verificationCodeModel.create({
+      userId: user._id,
+      type: verificationCodeType.PasswordReset,
+      code: hashCode(code),
+      expiresAt,
     }),
-  });
-  appAssert(
-    data?.id,
-    INTERNAL_SERVER_ERROR,
-    ErrorMessages.ServerError,
-    AppErrorCode.ServerError,
-  );
+    sendMail({
+      to: user.email,
+      ...getSecurityAlertTemplate({
+        email: user.email,
+        title: "Password Reset Requested",
+        action: "A password reset was requested for your account",
+        resetPasswordUrl: url,
+        ip,
+        userAgent,
+      }),
+    }),
+  ]);
 
-  return {
-    url,
-    emailId: data.id,
-  };
+  return { url };
 };
 
 export const resetPassword = async (params: ResetPasswordParams) => {
   const { password, verificationCode, userAgent, ip } = params;
-  const validCode = await verificationCodeModel.findOne({
-    code: hashCode(verificationCode),
-    type: verificationCodeType.PasswordReset,
-    expiresAt: { $gt: new Date() },
-  });
-  appAssert(
-    validCode,
-    NOT_FOUND,
-    ErrorMessages.InvalidOrExpiredToken,
-    AppErrorCode.VerificationFailed,
+  const validCode = await consumeVerificationCode(
+    verificationCode,
+    verificationCodeType.PasswordReset,
   );
   const user = await UserModel.findById(validCode.userId);
 
@@ -332,20 +443,20 @@ export const resetPassword = async (params: ResetPasswordParams) => {
   user.password = password;
   await user.save();
 
-  await validCode.deleteOne();
-  await sessionModel.deleteMany({ userId: user._id });
-  await sendMail({
-    to: user.email,
-    ...getSecurityAlertTemplate({
-      email: user.email,
-      title: "Password Changed",
-      action: "Your account password was successfully changed",
-      ip,
-      userAgent,
+  await Promise.all([
+    sessionModel.deleteMany({ userId: user._id }),
+    sendMail({
+      to: user.email,
+      ...getSecurityAlertTemplate({
+        email: user.email,
+        title: "Password Changed",
+        action: "Your account password was successfully changed",
+        ip,
+        userAgent,
+      }),
     }),
-  }).catch((error) => {
-    console.error("Password changed alert email failed:", error);
-  });
+  ]);
+
   return {
     user: user.omitPassword(),
   };
@@ -353,6 +464,7 @@ export const resetPassword = async (params: ResetPasswordParams) => {
 
 export const deleteUserAccount = async (params: UserParams) => {
   const { userId } = params;
+
   const deletedUser = await UserModel.findByIdAndDelete(userId);
   appAssert(
     deletedUser,
@@ -361,9 +473,10 @@ export const deleteUserAccount = async (params: UserParams) => {
     AppErrorCode.ServerError,
   );
 
-  await sessionModel.deleteMany({ userId });
-
-  await verificationCodeModel.deleteMany({ userId });
+  await Promise.all([
+    sessionModel.deleteMany({ userId }),
+    verificationCodeModel.deleteMany({ userId }),
+  ]);
 
   return deletedUser.omitPassword();
 };

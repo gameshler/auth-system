@@ -1,17 +1,20 @@
 import crypto, { randomBytes } from "crypto";
 import appAssert from "./appAssert";
 import { INTERNAL_SERVER_ERROR } from "../../constants/http";
-import { MFA_ENCRYPTION_KEY } from "../../constants/env";
+import { JWT_REFRESH_SECRET, MFA_ENCRYPTION_KEY } from "../../constants/env";
 
 const ALGORITHM = "aes-256-gcm";
 
 const ENCRYPTION_KEY = Buffer.from(MFA_ENCRYPTION_KEY, "base64");
 
-export const hashCode = (token: string): string =>
-  crypto.createHash("sha256").update(token).digest("hex");
+export const hashCode = (code: string): string =>
+  crypto.createHash("sha256").update(code).digest("hex");
 
 export const hashSecret = (secret: string): string =>
   crypto.createHmac("sha256", MFA_ENCRYPTION_KEY).update(secret).digest("hex");
+
+export const hashToken = (token: string): string =>
+  crypto.createHmac("sha256", JWT_REFRESH_SECRET).update(token).digest("hex");
 
 export const encryptSecret = (text: string): string => {
   const iv = crypto.randomBytes(12);
@@ -36,6 +39,19 @@ export const decryptSecret = (hash: string): string => {
   return decrypted;
 };
 
+export const safeEqual = (a: string, b: string): boolean => {
+  try {
+    const bufA = Buffer.from(a, "hex");
+    const bufB = Buffer.from(b, "hex");
+
+    if (bufA.length !== bufB.length) return false;
+
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+};
+
 export const generateUniqueCode = (): string =>
   randomBytes(32)
     .toString("base64")
@@ -44,7 +60,7 @@ export const generateUniqueCode = (): string =>
     .replace(/=+$/, "")
     .toLowerCase();
 
-export const generateBackupCodes = (count = 3): string[] => {
+export const generateBackupCodes = (count = 1): string[] => {
   return Array.from({ length: count }, () =>
     randomBytes(10).toString("base64url").toUpperCase(),
   );

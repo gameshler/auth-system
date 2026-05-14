@@ -1,10 +1,12 @@
 const Messages = () => ({
-  // Auth 
+  // Auth
   InvalidCredentials: "Invalid credentials",
+  UserVerified: "Already verified",
 
   // Authorization
   Unauthorized: "Unauthorized",
   Forbidden: "Access denied",
+  AccountLocked: "Account locked",
 
   // Session
   InvalidSession: "Please sign in again",

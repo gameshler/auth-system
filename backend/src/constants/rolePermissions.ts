@@ -4,6 +4,7 @@ import Permission from "./enums/permissions";
 export const rolePermissions: Record<Role, Permission[]> = {
   [Role.USER]: [
     Permission.USER_READ_SELF,
+    Permission.USER_VERIFY_SELF,
 
     Permission.SESSION_READ_SELF,
     Permission.SESSION_DELETE_SELF,
@@ -18,6 +19,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
   [Role.ADMIN]: [
     Permission.USER_READ_SELF,
     Permission.USER_READ_ANY,
+    Permission.USER_VERIFY_SELF,
 
     Permission.SESSION_READ_SELF,
     Permission.SESSION_READ_ANY,

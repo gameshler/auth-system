@@ -1,27 +1,13 @@
 import speakeasy from "speakeasy";
-import crypto from "crypto";
 import appAssert from "../../../shared/utils/appAssert";
 import {
   BAD_REQUEST,
   TOO_MANY_REQUESTS,
   UNAUTHORIZED,
 } from "../../../constants/http";
-import { hashSecret } from "../../../shared/utils/crypto";
+import { hashSecret, safeEqual } from "../../../shared/utils/crypto";
 import { ErrorMessages } from "../../../shared/utils/errorMessages";
 import AppErrorCode from "../../../constants/enums/AppErrorCode";
-
-export const safeEqual = (a: string, b: string): boolean => {
-  try {
-    const bufA = Buffer.from(a, "hex");
-    const bufB = Buffer.from(b, "hex");
-
-    if (bufA.length !== bufB.length) return false;
-
-    return crypto.timingSafeEqual(bufA, bufB);
-  } catch {
-    return false;
-  }
-};
 
 export const assertMfaNotEnabled = (user: any) => {
   appAssert(
@@ -36,15 +22,17 @@ export const assertTempSecretExists = (user: any) => {
   appAssert(
     user.mfa.tempSecret,
     BAD_REQUEST,
-    ErrorMessages.InvalidSession,
+    ErrorMessages.AccountOperationFailed,
     AppErrorCode.SessionExpired,
   );
 
   const TEN_MINUTES = 10 * 60 * 1000;
+  const createdAtTime = user.mfa.tempSecretCreatedAt
+    ? new Date(user.mfa.tempSecretCreatedAt).getTime()
+    : 0;
 
   appAssert(
-    user.mfa.tempSecretCreatedAt &&
-      Date.now() - user.mfa.tempSecretCreatedAt.getTime() < TEN_MINUTES,
+    createdAtTime > 0 && Date.now() - createdAtTime < TEN_MINUTES,
     BAD_REQUEST,
     ErrorMessages.InvalidOrExpiredToken,
     AppErrorCode.SessionExpired,
@@ -85,17 +73,20 @@ export const verifyTotpOrThrow = (
 };
 
 export const assertNotLocked = (user: any) => {
-  if (user.mfa.lockoutUntil && user.mfa.lockoutUntil > new Date()) {
-    const minutesLeft = Math.ceil(
-      (user.mfa.lockoutUntil.getTime() - Date.now()) / 60000,
-    );
+  if (user?.mfa?.lockoutUntil) {
+    const lockoutTime = new Date(user.mfa.lockoutUntil).getTime();
+    const now = Date.now();
 
-    appAssert(
-      false,
-      TOO_MANY_REQUESTS,
-      `Too many attempts. Try again in ${minutesLeft}m.`,
-      AppErrorCode.TooManyRequests,
-    );
+    if (lockoutTime > now) {
+      const minutesLeft = Math.ceil((lockoutTime - now) / 60000);
+
+      appAssert(
+        false,
+        TOO_MANY_REQUESTS,
+        `Too many attempts. Try again in ${minutesLeft}m.`,
+        AppErrorCode.TooManyRequests,
+      );
+    }
   }
 };
 
