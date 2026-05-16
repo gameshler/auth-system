@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
       trim: true,
       index: true,
     },
-    password: { type: String, required: true },
+    password: { type: String, required: true, select: false },
     verified: { type: Boolean, required: true, default: false },
     mfa: { type: mfaSchema, default: {} },
 
@@ -50,10 +50,6 @@ userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
 
   this.password = await hashValue(this.password);
-});
-
-userSchema.pre(["find", "findOne", "findOneAndUpdate"], async function () {
-  this.select("+mfa.lockoutUntil");
 });
 
 userSchema.methods.comparePassword = async function (val: string) {

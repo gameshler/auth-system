@@ -66,3 +66,15 @@ export const consumeVerificationCode = async (
 
   return validCode;
 };
+
+export const generateAccessToken = (
+  user: any,
+  sessionId: mongoose.Types.ObjectId,
+): string => {
+  return signToken({
+    userId: user._id,
+    sessionId: sessionId,
+    role: user.role,
+    verified: user.verified,
+  });
+};

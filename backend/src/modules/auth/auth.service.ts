@@ -28,7 +28,6 @@ import {
   fifteenminutesFromNow,
   fiveMinutesAgo,
   fiveminutesFromNow,
-  ONE_DAY_MS,
   sevenDaysFromNow,
   tenminutesFromNow,
 } from "../../shared/utils/date";
@@ -47,15 +46,14 @@ import {
   generateUniqueCode,
   hashCode,
   hashToken,
-  safeEqual,
 } from "../../shared/utils/crypto";
 import {
   consumeVerificationCode,
   createAuthenticatedSession,
+  generateAccessToken,
 } from "./auth.helpers";
 import { registerFailedMfaAttempt } from "./mfa/mfa.db";
-import mongoose from "mongoose";
-import Role from "../../constants/enums/roles";
+import { assertNotLocked } from "./mfa/mfa.assertions";
 
 export const createAccount = async (params: CreateAccountParams) => {
   const { fullName, email, password, userAgent, ip } = params;
@@ -107,7 +105,9 @@ export const createAccount = async (params: CreateAccountParams) => {
 
 export const loginUser = async (params: LoginParams): Promise<LoginResult> => {
   const { email, password, userAgent, ip } = params;
-  const user = await UserModel.findOne({ email });
+  const user = await UserModel.findOne({ email }).select(
+    "+password +mfa.lockoutUntil +mfa.failedAttempts",
+  );
   appAssert(
     user,
     UNAUTHORIZED,
@@ -177,7 +177,9 @@ export const loginUser = async (params: LoginParams): Promise<LoginResult> => {
   };
 };
 
-export const refreshUserAccessToken = async (refreshToken: string) => {
+export const refreshUserAccessToken = async (
+  refreshToken: string,
+): Promise<{ accessToken: string; newRefreshToken?: string }> => {
   const { payload, error } = verifyToken<RefreshTokenPayload>(refreshToken, {
     secret: refreshTokenSignOptions.secret,
   });
@@ -191,67 +193,90 @@ export const refreshUserAccessToken = async (refreshToken: string) => {
 
   const now = new Date();
   const incomingHash = hashToken(refreshToken);
+  const GRACE_PERIOD_MS = 15000;
+  const graceBoundary = new Date(now.getTime() - GRACE_PERIOD_MS);
 
-  const existing = await sessionModel
-    .findById(payload.sessionId)
-    .populate<{
-      userId: { _id: mongoose.Types.ObjectId; role: Role; verified: boolean };
-    }>("userId", "_id role verified")
+  const tryGraceRecovery = async () => {
+    const graceSession = await sessionModel
+      .findOne({
+        _id: payload.sessionId,
+        previousRefreshToken: incomingHash,
+        tokenRotatedAt: { $gte: graceBoundary },
+        expiresAt: { $gt: now },
+      })
+      .populate({
+        path: "userId",
+        select: "_id role verified +mfa.lockoutUntil",
+      })
+      .lean();
+
+    if (graceSession && graceSession.userId) {
+      assertNotLocked(graceSession.userId);
+      return {
+        accessToken: generateAccessToken(graceSession.userId, graceSession._id),
+      };
+    }
+    return null;
+  };
+
+  const earlyGraceRecovery = await tryGraceRecovery();
+  if (earlyGraceRecovery) return earlyGraceRecovery;
+
+  const candidateRefreshToken = signToken(
+    { sessionId: payload.sessionId },
+    refreshTokenSignOptions,
+  );
+  const candidateHash = hashToken(candidateRefreshToken);
+
+  const rotatedSession = await sessionModel
+    .findOneAndUpdate(
+      {
+        _id: payload.sessionId,
+        refreshToken: incomingHash,
+        expiresAt: { $gt: now },
+      },
+      {
+        $set: {
+          refreshToken: candidateHash,
+          previousRefreshToken: incomingHash,
+          tokenRotatedAt: now,
+          expiresAt: sevenDaysFromNow(),
+        },
+      },
+      {
+        returnDocument: "after",
+        populate: {
+          path: "userId",
+          select: "_id role verified +mfa.lockoutUntil",
+        },
+      },
+    )
     .lean();
 
-  appAssert(
-    existing && existing.userId,
-    UNAUTHORIZED,
-    ErrorMessages.InvalidSession,
-    AppErrorCode.InvalidSession,
-  );
-
-  const expiresAtTime = new Date(existing.expiresAt).getTime();
-
-  appAssert(
-    expiresAtTime > now.getTime(),
-    UNAUTHORIZED,
-    ErrorMessages.InvalidSession,
-    AppErrorCode.SessionExpired,
-  );
-
-  const user = existing.userId;
-  const isValidCurrentToken = safeEqual(existing.refreshToken, incomingHash);
-  const GRACE_PERIOD_MS = 15000;
-
-  const rotatedTime = existing.tokenRotatedAt
-    ? new Date(existing.tokenRotatedAt).getTime()
-    : 0;
-
-  const tokenNeedsRotation = expiresAtTime - now.getTime() <= ONE_DAY_MS;
-
-  if (!tokenNeedsRotation && isValidCurrentToken) {
-    const accessToken = signToken({
-      userId: user._id,
-      sessionId: existing._id,
-      role: user.role,
-      verified: user.verified,
-    });
-    return { accessToken };
+  if (rotatedSession && rotatedSession.userId) {
+    assertNotLocked(rotatedSession.userId);
+    return {
+      accessToken: generateAccessToken(
+        rotatedSession.userId,
+        rotatedSession._id,
+      ),
+      newRefreshToken: candidateRefreshToken,
+    };
   }
 
-  const isGracePeriod =
-    existing.previousRefreshToken &&
-    safeEqual(existing.previousRefreshToken, incomingHash) &&
-    now.getTime() - rotatedTime < GRACE_PERIOD_MS;
+  const lateGraceRecovery = await tryGraceRecovery();
+  if (lateGraceRecovery) return lateGraceRecovery;
 
-  if (isGracePeriod) {
-    const accessToken = signToken({
-      userId: user._id,
-      sessionId: existing._id,
-      role: user.role,
-      verified: user.verified,
-    });
-    return { accessToken };
-  }
+  const historicalSession = await sessionModel
+    .findOne({
+      _id: payload.sessionId,
+      previousRefreshToken: incomingHash,
+    })
+    .lean();
 
-  if (!isValidCurrentToken && !isGracePeriod) {
-    await sessionModel.deleteOne({ _id: existing._id });
+  if (historicalSession) {
+    await sessionModel.deleteMany({ userId: historicalSession.userId });
+
     appAssert(
       false,
       UNAUTHORIZED,
@@ -260,60 +285,12 @@ export const refreshUserAccessToken = async (refreshToken: string) => {
     );
   }
 
-  const newRefreshToken = signToken(
-    { sessionId: payload.sessionId },
-    refreshTokenSignOptions,
+  appAssert(
+    false,
+    UNAUTHORIZED,
+    ErrorMessages.InvalidSession,
+    AppErrorCode.InvalidSession,
   );
-  const newHash = hashToken(newRefreshToken);
-
-  const wasRotated = await sessionModel.updateOne(
-    { _id: existing._id, refreshToken: incomingHash },
-    {
-      $set: {
-        refreshToken: newHash,
-        previousRefreshToken: incomingHash,
-        tokenRotatedAt: now,
-        expiresAt: sevenDaysFromNow(),
-      },
-    },
-  );
-
-  if (wasRotated.modifiedCount === 0) {
-    const doubleCheck = await sessionModel.findById(existing._id).lean();
-    const doubleCheckRotatedTime = doubleCheck?.tokenRotatedAt
-      ? new Date(doubleCheck.tokenRotatedAt).getTime()
-      : 0;
-
-    const isConcurrentGrace =
-      doubleCheck &&
-      doubleCheck.previousRefreshToken &&
-      safeEqual(doubleCheck.previousRefreshToken, incomingHash) &&
-      new Date().getTime() - doubleCheckRotatedTime < GRACE_PERIOD_MS;
-
-    appAssert(
-      isConcurrentGrace,
-      UNAUTHORIZED,
-      ErrorMessages.InvalidSession,
-      AppErrorCode.InvalidSession,
-    );
-
-    const accessToken = signToken({
-      userId: user._id,
-      sessionId: existing._id,
-      role: user.role,
-      verified: user.verified,
-    });
-    return { accessToken };
-  }
-
-  const accessToken = signToken({
-    userId: user._id,
-    sessionId: existing._id,
-    role: user.role,
-    verified: user.verified,
-  });
-
-  return { accessToken, newRefreshToken };
 };
 
 export const verifyEmail = async (code: string) => {
@@ -432,7 +409,7 @@ export const resetPassword = async (params: ResetPasswordParams) => {
     verificationCode,
     verificationCodeType.PasswordReset,
   );
-  const user = await UserModel.findById(validCode.userId);
+  const user = await UserModel.findById(validCode.userId).select("+password");
 
   appAssert(
     user,

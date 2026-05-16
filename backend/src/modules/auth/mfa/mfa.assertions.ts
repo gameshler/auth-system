@@ -73,20 +73,16 @@ export const verifyTotpOrThrow = (
 };
 
 export const assertNotLocked = (user: any) => {
-  if (user?.mfa?.lockoutUntil) {
-    const lockoutTime = new Date(user.mfa.lockoutUntil).getTime();
-    const now = Date.now();
-
-    if (lockoutTime > now) {
-      const minutesLeft = Math.ceil((lockoutTime - now) / 60000);
-
-      appAssert(
-        false,
-        TOO_MANY_REQUESTS,
-        `Too many attempts. Try again in ${minutesLeft}m.`,
-        AppErrorCode.TooManyRequests,
-      );
-    }
+  if (user.mfa?.lockoutUntil && user.mfa.lockoutUntil > new Date()) {
+    const remainingTime = Math.ceil(
+      (user.mfa.lockoutUntil.getTime() - Date.now()) / 1000 / 60,
+    );
+    appAssert(
+      false,
+      TOO_MANY_REQUESTS,
+      `Too many failed attempts. Try again in ${remainingTime} minutes.`,
+      AppErrorCode.TooManyRequests,
+    );
   }
 };
 

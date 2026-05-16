@@ -130,24 +130,42 @@ export const registerFailedMfaAttempt = async (
 ) => {
   const LOCKOUT_THRESHOLD = 5;
   const LOCKOUT_DURATION = 15 * 60 * 1000;
+  const now = new Date();
+  const lockoutUntilDate = new Date(now.getTime() + LOCKOUT_DURATION);
 
-  const user = await UserModel.findByIdAndUpdate(
-    userId,
-    { $inc: { "mfa.failedAttempts": 1 } },
-    { returnDocument: "after", select: "mfa.failedAttempts" },
-  );
+  const determineCurrentAttempts = {
+    $cond: {
+      if: {
+        $and: [
+          { $ifNull: ["$mfa.lockoutUntil", false] },
+          { $lte: ["$mfa.lockoutUntil", now] },
+        ],
+      },
+      then: 1,
+      else: { $add: [{ $ifNull: ["$mfa.failedAttempts", 0] }, 1] },
+    },
+  };
 
-  if (user && user.mfa.failedAttempts >= LOCKOUT_THRESHOLD) {
-    await UserModel.updateOne(
-      { _id: userId },
-      {
-        $set: {
-          "mfa.lockoutUntil": new Date(Date.now() + LOCKOUT_DURATION),
-          "mfa.failedAttempts": 0,
+  await UserModel.updateOne({ _id: userId }, [
+    {
+      $set: {
+        "mfa.failedAttempts": determineCurrentAttempts,
+        "mfa.lockoutUntil": {
+          $cond: {
+            if: { $gte: [determineCurrentAttempts, LOCKOUT_THRESHOLD] },
+            then: lockoutUntilDate,
+            else: {
+              $cond: {
+                if: { $lte: [{ $ifNull: ["$mfa.lockoutUntil", now] }, now] },
+                then: null,
+                else: "$mfa.lockoutUntil",
+              },
+            },
+          },
         },
       },
-    );
-  }
+    },
+  ]);
 };
 
 export const consumeBackupCode = async (
@@ -185,7 +203,7 @@ export const updateLastUsedStep = async (
 };
 
 export const getUserForDisableMfa = async (userId: mongoose.Types.ObjectId) => {
-  const user = await UserModel.findById(userId);
+  const user = await UserModel.findById(userId).select("+password");
 
   appAssert(
     user,

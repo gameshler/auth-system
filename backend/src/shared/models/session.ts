@@ -8,6 +8,7 @@ const sessionSchema = new mongoose.Schema<sessionDocument>(
       ref: "User",
       type: mongoose.Schema.Types.ObjectId,
       required: true,
+      index: true,
     },
     userAgent: { type: String },
     ip: { type: String },
@@ -28,8 +29,6 @@ const sessionSchema = new mongoose.Schema<sessionDocument>(
   { versionKey: false },
 );
 
-sessionSchema.index({ _id: 1, refreshToken: 1 });
-sessionSchema.index({ userId: 1, expiresAt: 1, createdAt: -1 });
 sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const sessionModel = mongoose.model<sessionDocument>("Session", sessionSchema);
