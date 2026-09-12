@@ -19,7 +19,7 @@
     "express-rate-limit": "^8.5.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.6.1",
+    "mongoose": "^9.7.2",
     "qrcode": "^1.5.4",
     "resend": "^6.12.3",
     "speakeasy": "^2.0.0",
